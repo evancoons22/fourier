@@ -1,6 +1,5 @@
 #include <math.h>
 #include <stdio.h>
-// #include "omp.h"
 
 typedef struct {
     double real;
@@ -9,7 +8,7 @@ typedef struct {
 
 #define PI 3.14159265
 
-void DFT(complex *x, complex *X, int N, int K) {
+void DFT(complex *x, complex *X, int N, int K, int RANGE) {
     // the outer loop is the number of resulting frequencies we want
     for (int k = 0; k < K; k++) {
         X[k].real = 0.0;
@@ -19,7 +18,7 @@ void DFT(complex *x, complex *X, int N, int K) {
             // use euler's formula to calculate exp(ix) = cos(x) + isin(x)
             // X[k].real += x[n].real * cos(angle);
             // X[k].imag -= x[n].imag * sin(angle);
-            double angle = 2 * PI * k * n / N;
+            double angle = 2 * PI * k * n  / N;
             double cos_angle = cos(angle);
             double sin_angle = sin(angle);
             X[k].real += x[n].real * cos_angle - x[n].imag * sin_angle;
@@ -28,8 +27,6 @@ void DFT(complex *x, complex *X, int N, int K) {
     }
 }
 
-void FFT(complex *x, complex *X, int N) { 
-}
 
 void iDFT(complex *X, complex *y, int N) {
     // computing the inverse DFT
@@ -59,10 +56,22 @@ void print_desmos(complex *X, int N) {
 }
 
 double test_func(double x) {
-    // return 5 * cos(2*x / 5 + 2) + 3 * sin(2 *x);
-    // return cos(PI * x) + cos(PI * 2 * x);
     // the period is 2pi/b, the frequency is b/2pi
-    return cos(10 * 2 * PI * x);
+    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x) + sin(40 * x);  // frequency of 10
+}
+
+double test_func2(double x) { 
+    int w = PI * 2 * 10;
+    int total = 0.0; 
+    for (int i = 1; i < 5; i ++) { 
+        total += i*cos(w * x * i);
+    } 
+    return total;
+} 
+
+double test_func3(double x) { 
+    double w = PI * 2;
+    return 2 * sin(w*x) + sin(w*50*x);
 }
 
 void write_frequencies(complex *X, int K) {
@@ -74,50 +83,47 @@ void write_frequencies(complex *X, int K) {
     }
 }
 
+void write_frequencies_csv(complex *X, int K) {
+    // write to data.csv
+    FILE *f = fopen("data.csv", "w");
+    // write columns, index, real, imag
+    fprintf(f, "index,real,imag\n");
+    for (int k = 0; k < K; k++) {
+        // the indices are i * range / N
+        fprintf(f, "%d,%f,%f\n", k, X[k].real, X[k].imag);
+    }
+    
+}
+
+#define  K 10 
+#define  N  1000
+#define  RANGE  100
+
 int main() {
-    int K = 30;
-    int N = 100;
-    int range = 100;
     complex X[K];
     complex x[N];
+    
+    // malloc for dynamic size
+    //complex *X = (complex *)malloc(K * sizeof(complex));
+    //complex *x = (complex *)malloc(N * sizeof(complex));
 
+    // gathering samples
     for (int i = 0; i < N; i++) {
         //double index = (double)i / N * range;
         // double index = (double)i;
-        x[i].real = test_func(i);
+        x[i].real = test_func3((double)i/N);
         x[i].imag = 0.0;
     }
 
     // x -> X -> y
-    DFT(x, X, N, K);
+    DFT(x, X, N, K, RANGE);
+
+    write_frequencies_csv(X, K);
+
+    // complex y[N];
     // iDFT(X, y, N);
+    // print_desmos(y, N);
 
-    write_frequencies(X, K);
 
-    // for (int i = 0; i < N; i++) {
-    //     printf("original[%d]  = %.5f + %.5fi\n", i, x[i].real, x[i].imag);
-    // }
-
-    // for (int i = 0; i < N; i++) {
-    //     printf("at frequency:[%d], real amplitude:   = %.5f + %.5fi\n", i,
-    //     X[i].real, X[i].imag);
-    // }
-
-    /* desmos printing
-       printf("printing desmos version\n");
-       double period;
-       for (int i = 0; i < N; i++) {
-       period = 2 * PI / i;
-       printf("+ %.5f * cos(%.5fx)", X[i].real, period);
-       }
-       */
-
-    // reconstruction
-    // for (int i = 0; i < N; i++) {
-    //     printf("reconstructed sample[%d]  = %.5f + %.5fi\n", i, y[i].real,
-    //     y[i].imag);
-    // }
-
-    // print_desmos(X, N);
     return 0;
 }
