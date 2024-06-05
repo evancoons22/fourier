@@ -1,5 +1,6 @@
 #include <math.h>
 #include <stdio.h>
+#include <stdlib.h>
 
 typedef struct {
     double real;
@@ -9,22 +10,35 @@ typedef struct {
 #define PI 3.14159265
 
 void DFT(complex *x, complex *X, int N, int K, int RANGE) {
-    // the outer loop is the number of resulting frequencies we want
+    //  // M is the new length after zero-padding
+    //  edit here for sampling frequency
+    int M = 1 * N;
+    
+    // Allocate memory for the zero-padded signal
+    complex *x_padded = (complex *)calloc(M, sizeof(complex));
+    
+    // Copy the original signal into the zero-padded signal
+    for (int n = 0; n < N; n++) {
+        x_padded[n] = x[n];
+    }
+
     for (int k = 0; k < K; k++) {
         X[k].real = 0.0;
         X[k].imag = 0.0;
         // the inner loop calculates each of those
         for (int n = 0; n < N; n++) {
             // use euler's formula to calculate exp(ix) = cos(x) + isin(x)
-            // X[k].real += x[n].real * cos(angle);
-            // X[k].imag -= x[n].imag * sin(angle);
-            double angle = 2 * PI * k * n  / N;
+            // in this convention, exp(-ix) for DFT
+            double angle = 2 * PI * k * n / M;
             double cos_angle = cos(angle);
             double sin_angle = sin(angle);
-            X[k].real += x[n].real * cos_angle - x[n].imag * sin_angle;
-            X[k].imag += x[n].real * sin_angle + x[n].imag * cos_angle;
+            X[k].real += x_padded[n].real * cos_angle + x_padded[n].imag * sin_angle;
+            X[k].imag += x_padded[n].real * sin_angle - x_padded[n].imag * cos_angle;
         }
+        //X[k].real /= N;
+        //X[k].imag /= N;
     }
+    free(x_padded);
 }
 
 
@@ -37,8 +51,10 @@ void iDFT(complex *X, complex *y, int N) {
         for (int n = 0; n < N; n++) {
             // use euler's formula to calculate exp(ix) = cos(x) + isin(x)
             double angle = 2 * PI * k * n / N;
-            y[k].real += (X[n].real * cos(angle) - X[n].imag * sin(angle));
-            y[k].imag += (X[n].real * cos(angle) + X[n].imag * sin(angle));
+            double cos_angle = cos(angle);
+            double sin_angle = sin(angle);
+            y[k].real += (X[n].real * cos_angle - X[n].imag * sin_angle); 
+            y[k].imag += (X[n].real * cos_angle + X[n].imag * sin_angle);
         }
         y[k].real /= N;
         y[k].imag /= N;
@@ -95,8 +111,8 @@ void write_frequencies_csv(complex *X, int K) {
     
 }
 
-#define  K 50 
-#define  N  1000
+#define  K 20 
+#define  N 20 
 #define  RANGE  100
 
 int main() {
@@ -108,15 +124,25 @@ int main() {
     //complex *x = (complex *)malloc(N * sizeof(complex));
 
     // gathering samples
+    printf("original signal \n");
     for (int i = 0; i < N; i++) {
         //double index = (double)i / N * range;
         // double index = (double)i;
         x[i].real = test_func((double)i/N);
         x[i].imag = 0.0;
+        printf("%f %f\n", x[i].real, x[i].imag);
     }
 
     // x -> X -> y
     DFT(x, X, N, K, RANGE);
+
+    complex y[N];
+    iDFT(X, y, N);
+
+    printf("reconstructed signal \n");
+    for (int i = 0; i < N; i++) {
+        printf("%f %f\n", y[i].real, y[i].imag);
+    }
 
     write_frequencies_csv(X, K);
 
