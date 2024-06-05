@@ -1,7 +1,7 @@
 import matplotlib.pyplot as plt
 import pandas as pd
-# import matplotlib
-# matplotlib.use('Agg')
+import matplotlib
+matplotlib.use('Agg')
 # open data.txt and plot the real values
 with open('data.csv') as f:
     # data = f.read()

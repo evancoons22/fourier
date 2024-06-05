@@ -57,7 +57,7 @@ void print_desmos(complex *X, int N) {
 
 double test_func(double x) {
     // the period is 2pi/b, the frequency is b/2pi
-    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x) + sin(40 * x);  // frequency of 10
+    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
 }
 
 double test_func2(double x) { 
@@ -95,7 +95,7 @@ void write_frequencies_csv(complex *X, int K) {
     
 }
 
-#define  K 10 
+#define  K 50 
 #define  N  1000
 #define  RANGE  100
 
@@ -111,7 +111,7 @@ int main() {
     for (int i = 0; i < N; i++) {
         //double index = (double)i / N * range;
         // double index = (double)i;
-        x[i].real = test_func3((double)i/N);
+        x[i].real = test_func((double)i/N);
         x[i].imag = 0.0;
     }
 
