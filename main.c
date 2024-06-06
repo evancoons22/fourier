@@ -111,8 +111,8 @@ void write_frequencies_csv(complex *X, int K) {
     
 }
 
-#define  K 20 
-#define  N 20 
+#define  K 50 
+#define  N 50 
 #define  RANGE  100
 
 int main() {
@@ -124,13 +124,13 @@ int main() {
     //complex *x = (complex *)malloc(N * sizeof(complex));
 
     // gathering samples
-    printf("original signal \n");
+    // printf("original signal \n");
     for (int i = 0; i < N; i++) {
         //double index = (double)i / N * range;
         // double index = (double)i;
         x[i].real = test_func((double)i/N);
         x[i].imag = 0.0;
-        printf("%f %f\n", x[i].real, x[i].imag);
+        // printf("%f %f\n", x[i].real, x[i].imag);
     }
 
     // x -> X -> y
@@ -139,10 +139,10 @@ int main() {
     complex y[N];
     iDFT(X, y, N);
 
-    printf("reconstructed signal \n");
-    for (int i = 0; i < N; i++) {
-        printf("%f %f\n", y[i].real, y[i].imag);
-    }
+    // printf("reconstructed signal \n");
+   // for (int i = 0; i < N; i++) {
+   //     printf("%f %f\n", y[i].real, y[i].imag);
+   // }
 
     write_frequencies_csv(X, K);
 
