@@ -1,9 +1,10 @@
 #include <stdio.h> 
 #include <math.h>
+#include <stdlib.h>
 
 unsigned int bit_reversal(unsigned int x,  int bits) {
     // want to go from 00011 to 11000, for example
-    int y = 0;
+    unsigned int y = 0;
     for (int i = 0; i < bits; i++) { 
         y = y << 1 | (x & 1);
         x >>= 1;
@@ -11,11 +12,12 @@ unsigned int bit_reversal(unsigned int x,  int bits) {
     return y;
 } 
 
-void bit_reverse_copy(int *a, int *b, int l) { 
+void bit_reverse_copy(double *a, double *b, int l) { 
     // for each number in the a array, reverse the bits
-    int bits = log(l);
-    for (int i = 0; i < l; i++) { 
-        b[i] = bit_reversal(a[i], bits);
+    int bits = log2(l);
+    for (unsigned int i = 0; i < l; i++) { 
+        unsigned int revk = bit_reversal(i, bits);
+        b[revk] = a[i];
     } 
 } 
 
@@ -42,23 +44,20 @@ void print_binary_array(int *a, int n) {
         print_binary(a[i]);
         printf(" ");
     } 
+} 
 
+int is_power_of_two(int x) {
+    return (x > 0) && ((x & (x-1)) == 0);
 } 
 
 
 int main() { 
-    int num = 6;
-    int y = bit_reversal(num, sizeof(int)*4);
-    //printf("%lu\n", 4 * sizeof(int));
-    // print_binary(num);
-    // printf("\n");
-    // print_binary(y);
+    double arr1[8] = {0,1,2,3,4,5,6,7};
 
-    int arr1[6] = {1,2,3,4,5,7};
-    int arr2[6] = {0,0,0,0,0,0};
-    print_binary_array(arr1, 6);
-    bit_reverse_copy(arr1, arr2, 6);
-    printf("\n");
-    print_binary_array(arr2, 6);
+    unsigned int n = 8;
 
-} 
+    double* arr2 = (double*)malloc(n * sizeof(double) * 8);
+    bit_reverse_copy(arr1, arr2, n);
+
+
+}
