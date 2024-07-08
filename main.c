@@ -111,8 +111,8 @@ void write_frequencies_csv(complex *X, int K) {
     
 }
 
-#define  K 50 
-#define  N 50 
+#define  K 64
+#define  N 64
 #define  RANGE  100
 
 int main() {
