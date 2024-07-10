@@ -106,7 +106,6 @@ int is_power_of_two(int x) {
 
 void cooley_turkey_rec(complex *x, complex *X, int n) { 
     // if the length is one, return the term itself
-    // X_k = x_k, for length 1
     if (n == 1) {  
         X[0] = x[0];
         return;
@@ -145,10 +144,6 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
         X[k + n / 2] = complex_sub(even_transformed[k], t);
     } 
 
-    //free(even);
-    //free(odd);
-    //free(even_transformed);
-    //free(odd_transformed);
 } 
 
 void cooley_turkey(complex *x, complex *X, int n) { 
