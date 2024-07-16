@@ -3,6 +3,7 @@
 #include <stdlib.h>
 
 #define PI 3.14159265358979323846
+#define N 64
 
 typedef struct {
     double real;
@@ -40,7 +41,8 @@ complex complex_from_polar(double r, double theta) {
 
 double test_func(double x) {
     // the period is 2pi/b, the frequency is b/2pi
-    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
+    // return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
+    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10
 }
 
 void write_frequencies_csv(complex *X, int K) {
@@ -135,13 +137,15 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
     cooley_turkey_rec(odd, odd_transformed, n/2);
 
     // combine 2 arrays
-    for (size_t k = 0; k < n/2; k++) { 
-        double angle = -2 * PI * k / n;
+    for (size_t k = 0; k < n; k++) { 
+        double angle = -2 * PI / N * k;
         complex twiddle = complex_from_polar(1.0, angle);
         complex t = complex_mul(twiddle, odd_transformed[k]);
 
-        X[k] = complex_add(even_transformed[k], t);
-        X[k + n / 2] = complex_sub(even_transformed[k], t);
+        // X[k] = complex_add(X[k], complex_add(even_transformed[k], t));
+        // X[k + n / 2] = complex_add(X[k + n / 2], complex_sub(even_transformed[k], t));
+        X[k].real += t.real * even_transformed[k].real - t.imag * even_transformed[k].imag;
+        X[k].imag += t.real * even_transformed[k].imag + t.imag * even_transformed[k].real;
     } 
 
 } 
