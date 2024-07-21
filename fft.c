@@ -42,7 +42,7 @@ complex complex_from_polar(double r, double theta) {
 double test_func(double x) {
     // the period is 2pi/b, the frequency is b/2pi
     // return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
-    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10
+    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10 and 20
 }
 
 void write_frequencies_csv(complex *X, int K) {
@@ -93,7 +93,14 @@ void print_array(double *a, int n) {
         printf("%f ", a[i]);
     } 
 
-} 
+}
+
+void print_complex_array(complex *a, int n) { 
+    for (int i = 0; i < n; i ++) { 
+        printf("%f %f ", a[i].real, a[i].imag);
+    } 
+}
+
 
 void print_binary_array(int *a, int n) { 
     for (int i = 0; i < n; i ++) { 
@@ -120,7 +127,7 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
 
     // split into even and odd problems
     for (size_t i = 0; i < n; i++) { 
-        if (i %2 == 0) { 
+        if (i % 2 == 0) { 
             even[even_index++] = x[i];
         } else { 
             odd[odd_index++] = x[i];
@@ -128,7 +135,6 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
     } 
 
     // create 2 arrays for the transformed inputs
-
     complex even_transformed[n/2];
     complex odd_transformed[n/2];
 
@@ -137,15 +143,13 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
     cooley_turkey_rec(odd, odd_transformed, n/2);
 
     // combine 2 arrays
-    for (size_t k = 0; k < n; k++) { 
-        double angle = -2 * PI / N * k;
+    for (size_t k = 0; k < n / 2; k++) { 
+        double angle = -2 * PI / n * k;
         complex twiddle = complex_from_polar(1.0, angle);
         complex t = complex_mul(twiddle, odd_transformed[k]);
 
-        // X[k] = complex_add(X[k], complex_add(even_transformed[k], t));
-        // X[k + n / 2] = complex_add(X[k + n / 2], complex_sub(even_transformed[k], t));
-        X[k].real += t.real * even_transformed[k].real - t.imag * even_transformed[k].imag;
-        X[k].imag += t.real * even_transformed[k].imag + t.imag * even_transformed[k].real;
+        X[k] =  complex_add(even_transformed[k], t);
+        X[k + n / 2] = complex_sub(even_transformed[k], t);
     } 
 
 } 
@@ -176,7 +180,13 @@ int main() {
 
     complex X[n];
 
+    printf("sampled points:\n");
+    print_complex_array(arr1, n);
+
     cooley_turkey(arr1, X, n);
+
+    printf("\ntransformed points:\n");
+    print_complex_array(X, n);
 
     // Print the results
     // for (int i = 0; i < n; i++) {
