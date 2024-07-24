@@ -73,8 +73,8 @@ void print_desmos(complex *X, int N) {
 
 double test_func(double x) {
     // the period is 2pi/b, the frequency is b/2pi
-    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
-    //return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10
+    // return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
+    return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10
 }
 
 double test_func2(double x) { 

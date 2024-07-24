@@ -1,2 +1,2 @@
 #/bin/bash
-gcc -o main main.c -lm && ./main && python3 plot.py
+gcc -o main main.c -lm && ./main && python3 plot.py && feh plot.png

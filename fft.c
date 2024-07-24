@@ -43,6 +43,7 @@ double test_func(double x) {
     // the period is 2pi/b, the frequency is b/2pi
     // return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x) + 3 * cos(30 * 2 * PI * x) + 4 * cos(40 * 2 * PI * x);  // frequency of 10
     return cos(10 * 2 * PI * x) + 2 * cos(20 * 2 * PI * x);  // frequency of 10 and 20
+    // return cos(10 * 2 * PI * x);  // frequency of 10 and 20
 }
 
 void write_frequencies_csv(complex *X, int K) {
@@ -50,7 +51,7 @@ void write_frequencies_csv(complex *X, int K) {
     FILE *f = fopen("data.csv", "w");
     // write columns, index, real, imag
     fprintf(f, "index,real,imag\n");
-    for (int k = 0; k < K/2; k++) {
+    for (int k = 0; k < K; k++) {
         // the indices are i * range / N
         fprintf(f, "%d,%f,%f\n", k, sqrt(X[k].real*X[k].real + X[k].imag *  X[k].imag), 0.0);
         // fprintf(f, "%d,%f,%f\n", k, X[k].real, 0.0);
@@ -97,7 +98,7 @@ void print_array(double *a, int n) {
 
 void print_complex_array(complex *a, int n) { 
     for (int i = 0; i < n; i ++) { 
-        printf("%f %f ", a[i].real, a[i].imag);
+        printf("%d: %f %f \n", i, a[i].real, a[i].imag);
     } 
 }
 
@@ -113,20 +114,26 @@ int is_power_of_two(int x) {
     return (x > 0) && ((x & (x-1)) == 0);
 }  
 
-void cooley_turkey_rec(complex *x, complex *X, int n) { 
+void cooley_tukey_rec(complex *x, complex *X, int n) { 
     // if the length is one, return the term itself
     if (n == 1) {  
         X[0] = x[0];
         return;
     } 
 
-    complex even[n/2];
-    complex odd[n/2];
+    // allocate memory dynamically
+    complex *even = (complex *)malloc(n/2 * sizeof(complex));
+    complex *odd = (complex *)malloc(n/2 * sizeof(complex));
+    complex *even_transformed = (complex *)malloc(n/2 * sizeof(complex));
+    complex *odd_transformed = (complex *)malloc(n/2 * sizeof(complex));
+
+    //complex even[n/2];
+    //complex odd[n/2];
     
     int even_index = 0, odd_index = 0;
 
     // split into even and odd problems
-    for (size_t i = 0; i < n; i++) { 
+    for (int i = 0; i < n; i++) { 
         if (i % 2 == 0) { 
             even[even_index++] = x[i];
         } else { 
@@ -134,13 +141,15 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
         } 
     } 
 
+    // dynamic allocation of memory
+
     // create 2 arrays for the transformed inputs
-    complex even_transformed[n/2];
-    complex odd_transformed[n/2];
+    // complex even_transformed[n/2];
+    // complex odd_transformed[n/2];
 
     // call recursion again
-    cooley_turkey_rec(even, even_transformed, n/2);
-    cooley_turkey_rec(odd, odd_transformed, n/2);
+    cooley_tukey_rec(even, even_transformed, n/2);
+    cooley_tukey_rec(odd, odd_transformed, n/2);
 
     // combine 2 arrays
     for (size_t k = 0; k < n / 2; k++) { 
@@ -152,9 +161,13 @@ void cooley_turkey_rec(complex *x, complex *X, int n) {
         X[k + n / 2] = complex_sub(even_transformed[k], t);
     } 
 
+    free(even);
+    free(odd);
+    free(even_transformed);
+    free(odd_transformed);
 } 
 
-void cooley_turkey(complex *x, complex *X, int n) { 
+void cooley_tukey(complex *x, complex *X, int n) { 
     // y  is the bit reverse version of x
     //
     if (!is_power_of_two(n)) { 
@@ -166,12 +179,12 @@ void cooley_turkey(complex *x, complex *X, int n) {
     // double *y = (double *)malloc(n * sizeof(double));
     bit_reverse_copy(x, y, n); 
 
-    cooley_turkey_rec(y, X, n);
+    cooley_tukey_rec(y, X, n);
 } 
 
 int main() { 
-    complex arr1[128];
-    unsigned int n = 128;
+    complex arr1[64];
+    unsigned int n = 64;
     //// sample function for testing
     for (int i = 0; i < n; i++) {
         arr1[i].real= test_func((double)i/n);
@@ -183,7 +196,7 @@ int main() {
     printf("sampled points:\n");
     print_complex_array(arr1, n);
 
-    cooley_turkey(arr1, X, n);
+    cooley_tukey(arr1, X, n);
 
     printf("\ntransformed points:\n");
     print_complex_array(X, n);
