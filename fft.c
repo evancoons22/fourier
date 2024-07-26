@@ -1,9 +1,13 @@
 #include <stdio.h> 
 #include <math.h>
 #include <stdlib.h>
+#include <time.h>
+#include <unistd.h>
 
 #define PI 3.14159265358979323846
-#define N 64
+#define N 64 
+#define WINDOW_SIZE N
+#define OVERLAP 16
 
 typedef struct {
     double real;
@@ -53,7 +57,7 @@ void write_frequencies_csv(complex *X, int K) {
     fprintf(f, "index,real,imag\n");
     for (int k = 0; k < K; k++) {
         // the indices are i * range / N
-        fprintf(f, "%d,%f,%f\n", k, sqrt(X[k].real*X[k].real + X[k].imag *  X[k].imag), 0.0);
+        fprintf(f, "%d,%f,%f\n", k , sqrt(X[k].real*X[k].real + X[k].imag *  X[k].imag), 0.0);
         // fprintf(f, "%d,%f,%f\n", k, X[k].real, 0.0);
     }
 }
@@ -114,6 +118,31 @@ int is_power_of_two(int x) {
     return (x > 0) && ((x & (x-1)) == 0);
 }  
 
+
+
+// Faster random number generator
+static unsigned int seed = 1;
+inline static unsigned int fast_rand() {
+    seed = (214013 * seed + 2531011);
+    return (seed >> 16) & 0x7FFF;
+}
+
+void generate_random_signal(complex *signal, int n, int num_frequencies) {
+    for (int i = 0; i < n; i++) {
+        signal[i].real = 0;
+        signal[i].imag = 0;
+    }
+
+    for (int f = 0; f < num_frequencies; f++) {
+        double amplitude = (double)fast_rand() / 0x7FFF * 10;
+        int frequency = fast_rand() % (n/2);
+        double phase = (double)fast_rand() / 0x7FFF * 2 * PI;
+
+        for (int i = 0; i < n; i++) {
+            signal[i].real += amplitude * cos(2 * PI * frequency * i / n + phase);
+        }
+    }
+}
 void cooley_tukey_rec(complex *x, complex *X, int n) { 
     // if the length is one, return the term itself
     if (n == 1) {  
@@ -167,47 +196,159 @@ void cooley_tukey_rec(complex *x, complex *X, int n) {
     free(odd_transformed);
 } 
 
+// in this better implementation, the input is not preserved
+void cooley_tukey_iterative(complex *x, int n) {
+    // bit reversal
+    for (int i = 0; i < n; i++) {
+        int j = bit_reversal(i, (int)log2(n));
+        if (i < j) {
+            complex temp = x[i];
+            x[i] = x[j];
+            x[j] = temp;
+        }
+    }
+
+    // main loop, notice step *= 2
+    for (int step = 2; step <= n; step *= 2) {
+        double angle = -2 * PI / step;
+        complex w = complex_from_polar(1.0, angle);
+        
+        for (int k = 0; k < n; k += step) {
+            complex w_k = {1, 0}; // Start with w^0 = 1
+            
+            for (int j = 0; j < step / 2; j++) {
+                complex t = complex_mul(w_k, x[k + j + step/2]);
+                complex u = x[k + j];
+                // even and odd parts
+                x[k + j] = complex_add(u, t);
+                x[k + j + step/2] = complex_sub(u, t);
+                w_k = complex_mul(w_k, w);
+            }
+        }
+    }
+}
+
 void cooley_tukey(complex *x, complex *X, int n) { 
-    // y  is the bit reverse version of x
-    //
     if (!is_power_of_two(n)) { 
         fprintf(stderr, "Error: FFT length must be a power of 2\n");
         return;
     } 
 
     complex y[n];
-    // double *y = (double *)malloc(n * sizeof(double));
-    bit_reverse_copy(x, y, n); 
 
     cooley_tukey_rec(y, X, n);
 } 
 
+
+void print_to_terminal(complex *x, int n) {
+    static double magnitudes[N/2];
+    static int d[N/2];
+    static char buffer[N/2][N+3];  // Pre-allocate buffer for each line
+
+    // Calculate magnitudes and scale to 0-50 range
+    double max_magnitude = 0;
+    for (int i = 0; i < n/2; i++) {
+        magnitudes[i] = sqrt(x[i].real * x[i].real + x[i].imag * x[i].imag);
+        if (magnitudes[i] > max_magnitude) max_magnitude = magnitudes[i];
+    }
+
+    for (int i = 0; i < n/2; i++) {
+        d[i] = (int)(magnitudes[i] / max_magnitude * 50);
+    }
+
+    // Prepare output buffer
+    for (int i = 0; i < n/2; i++) {
+        int pos = sprintf(buffer[i], "%2d ", i);
+        for (int j = 0; j < d[i]; j++) {
+            buffer[i][pos++] = '*';
+        }
+        buffer[i][pos] = '\n';
+        buffer[i][pos+1] = '\0';
+    }
+
+    // Clear terminal and print
+    printf("\033[2J\033[1;1H");
+    for (int i = 0; i < n/2; i++) {
+        printf("%s", buffer[i]);
+    }
+}
+
+
+// Circular buffer for incoming samples
+double circular_buffer[N * 2];  // Twice the size to simplify implementation
+int buffer_pos = 0;
+
+// Generate a single random sample
+double generate_random_sample() {
+    double sample = 0;
+    int num_frequencies = 3;
+    for (int f = 0; f < num_frequencies; f++) {
+        double amplitude = (double)fast_rand() / 0x7FFF * 10;
+        int frequency = fast_rand() % (N/2);
+        double phase = (double)fast_rand() / 0x7FFF * 2 * PI;
+        sample += amplitude * sin(2 * PI * frequency * buffer_pos / N + phase);
+    }
+    return sample;
+}
+
+// Add a new sample to the circular buffer
+void add_sample_to_buffer(double sample) {
+    circular_buffer[buffer_pos] = sample;
+    circular_buffer[buffer_pos + N] = sample;  // Duplicate for easy windowing
+    buffer_pos = (buffer_pos + 1) % N;
+}
+
+// Get a window of samples from the circular buffer
+void get_window(complex *window) {
+    int start = (buffer_pos - WINDOW_SIZE + N) % N;
+    for (int i = 0; i < WINDOW_SIZE; i++) {
+        window[i].real = circular_buffer[start + i] * (0.54 - 0.46 * cos(2 * PI * i / (WINDOW_SIZE - 1)));  // Hamming window
+        window[i].imag = 0;
+    }
+}
 int main() { 
     complex arr1[64];
     unsigned int n = 64;
     //// sample function for testing
-    for (int i = 0; i < n; i++) {
-        arr1[i].real= test_func((double)i/n);
-        arr1[i].imag = 0.0;
+    // for (int i = 0; i < n; i++) {
+        // arr1[i].real= test_func((double)i * T / n);
+        // arr1[i].imag = 0.0;
+    // }
+    //
+
+    complex window[WINDOW_SIZE];
+    for (int i = 0; i < N; i++) {
+        add_sample_to_buffer(generate_random_sample());
+    }
+    
+    complex signal[n];
+    // complex transformed[n];
+    while(0) {  // Inf loop
+                //
+         // Generate and add new samples
+        for (int i = 0; i < OVERLAP; i++) {
+            add_sample_to_buffer(generate_random_sample());
+        }
+
+        // Get window of samples
+        get_window(window);
+
+        // Perform FFT
+        cooley_tukey_iterative(window, WINDOW_SIZE);
+
+        // Print results
+        print_to_terminal(window, WINDOW_SIZE);
+
+        usleep(25000);  // 0.25 second delay
     }
 
-    complex X[n];
-
-    printf("sampled points:\n");
-    print_complex_array(arr1, n);
-
-    cooley_tukey(arr1, X, n);
-
-    printf("\ntransformed points:\n");
-    print_complex_array(X, n);
-
-    // Print the results
-    // for (int i = 0; i < n; i++) {
-        // printf("X[%d] = %.2f + %.2fi\n", i, X[i].real, X[i].imag);
-    // }
-    
-    write_frequencies_csv(X, n);
-
+    // translate random signals
+    while(1) {
+        generate_random_signal(signal, N, 3);
+        cooley_tukey_iterative(signal, N);
+        print_to_terminal(signal, N);
+        usleep(25000);
+    }
     return 0;
 
 }
