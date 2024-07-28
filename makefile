@@ -1,30 +1,27 @@
-# Variables
+# Makefile to compile fft.c with math and portaudio libraries
+
+# Compiler
 CC = gcc
-CFLAGS = -Wall -g
-LDFLAGS = -lm
 
-# Source files
-SRCS = main.c
-# Object files
-OBJS = $(SRCS:.c=.o)
-# Executable file
-TARGET = main
+# Compiler flags
+CFLAGS = -Wall -O3
 
-# Default target
+# Libraries to link
+LIBS = -lm -lportaudio
+
+# Source file
+SRC = fft.c
+
+# Output executable
+TARGET = fft
+
+# Build rule
 all: $(TARGET)
 
-# Linking
-$(TARGET): $(OBJS)
-	$(CC) $(CFLAGS) -o $(TARGET) $(OBJS) $(LDFLAGS)
+$(TARGET): $(SRC)
+	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LIBS)
 
-# Compiling source files to object files
-%.o: %.c
-	$(CC) $(CFLAGS) -c $< -o $@
-
-# Clean up
+# Clean rule
 clean:
-	rm -f $(OBJS) $(TARGET)
-
-# Phony targets
-.PHONY: all clean
+	rm -f $(TARGET)
 
