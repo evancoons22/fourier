@@ -3,11 +3,36 @@
 #include <stdlib.h>
 #include <time.h>
 #include <unistd.h>
+#include <portaudio.h>
 
-#define PI 3.14159265358979323846
-#define N 64 
+
+#define SAMPLE_RATE 44100
+#define FRAMES_PER_BUFFER 256
+#define N 64  // FFT size
 #define WINDOW_SIZE N
-#define OVERLAP 16
+#define OVERLAP (N / 2)  // 50% overlap
+#define PI 3.14159265358979323846
+
+float circular_buffer[N * 2];
+int buffer_pos = 0;
+
+static int paCallback(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *userData)
+{
+    float *in = (float*)inputBuffer;
+    (void) outputBuffer; // Prevent unused variable warning
+
+    for (unsigned long i=0; i<framesPerBuffer; i++) {
+        circular_buffer[buffer_pos] = in[i];
+        circular_buffer[buffer_pos + N] = in[i];  // Duplicate for easy windowing
+        buffer_pos = (buffer_pos + 1) % N;
+    }
+
+    return paContinue;
+}
 
 typedef struct {
     double real;
@@ -274,9 +299,6 @@ void print_to_terminal(complex *x, int n) {
 }
 
 
-// Circular buffer for incoming samples
-double circular_buffer[N * 2];  // Twice the size to simplify implementation
-int buffer_pos = 0;
 
 // Generate a single random sample
 double generate_random_sample() {
@@ -307,29 +329,28 @@ void get_window(complex *window) {
     }
 }
 int main() { 
-    complex arr1[64];
-    unsigned int n = 64;
-    //// sample function for testing
-    // for (int i = 0; i < n; i++) {
-        // arr1[i].real= test_func((double)i * T / n);
-        // arr1[i].imag = 0.0;
-    // }
-    //
+     PaStream *stream;
+    PaError err;
+
+    err = Pa_Initialize();
+    if (err != paNoError) goto error;
+
+    err = Pa_OpenDefaultStream(&stream,
+                               1,           // input channel count
+                               0,           // output channel count
+                               paFloat32,   // sample format
+                               SAMPLE_RATE,
+                               FRAMES_PER_BUFFER,
+                               paCallback,
+                               NULL);
+    if (err != paNoError) goto error;
+
+    err = Pa_StartStream(stream);
+    if (err != paNoError) goto error;
 
     complex window[WINDOW_SIZE];
-    for (int i = 0; i < N; i++) {
-        add_sample_to_buffer(generate_random_sample());
-    }
-    
-    complex signal[n];
-    // complex transformed[n];
-    while(0) {  // Inf loop
-                //
-         // Generate and add new samples
-        for (int i = 0; i < OVERLAP; i++) {
-            add_sample_to_buffer(generate_random_sample());
-        }
 
+    while(1) {
         // Get window of samples
         get_window(window);
 
@@ -339,11 +360,28 @@ int main() {
         // Print results
         print_to_terminal(window, WINDOW_SIZE);
 
-        usleep(25000);  // 0.25 second delay
+        usleep(100000);  // 0.1 second delay
     }
 
+    err = Pa_StopStream(stream);
+    if (err != paNoError) goto error;
+
+    err = Pa_CloseStream(stream);
+    if (err != paNoError) goto error;
+
+    Pa_Terminate();
+    return 0;
+
+    error:
+        Pa_Terminate();
+        fprintf(stderr, "An error occurred while using the portaudio stream\n");
+        fprintf(stderr, "Error number: %d\n", err);
+        fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
+        return -1;
+
     // translate random signals
-    while(1) {
+    complex signal[N];
+    while(0) {
         generate_random_signal(signal, N, 3);
         cooley_tukey_iterative(signal, N);
         print_to_terminal(signal, N);
