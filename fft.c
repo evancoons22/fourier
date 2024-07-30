@@ -466,6 +466,27 @@ void generate_triangle(double *buffer, int n) {
     }
 }
 
+void low_pass_filter(complex *X, int n, double cutoff_frequency, double sample_rate) {
+    double cutoff = cutoff_frequency / sample_rate;
+    
+    for (int i = 0; i < n; i++) {
+        double frequency = (double)i / n;
+        
+        if (i > n/2) {
+            frequency = (double)(n-i) / n;  // Mirror for negative frequencies
+        }
+        
+        if (frequency > cutoff) {
+            // Attenuate frequencies above the cutoff
+            double attenuation = 1.0 - ((frequency - cutoff) / (0.5 - cutoff));
+            if (attenuation < 0) attenuation = 0;
+            
+            X[i].real *= attenuation;
+            X[i].imag *= attenuation;
+        }
+    }
+}
+
 int main() { 
     // --------------------------- Signal generation ------------------------------
     double time_domain[N];
@@ -484,7 +505,8 @@ int main() {
     cooley_tukey_iterative(freq_domain, N);
 
     // Here you could modify freq_domain for various effects
-    print_to_terminal(freq_domain, N);
+    // print_to_terminal(freq_domain, N);
+    low_pass_filter(freq_domain, N, 0.5, SAMPLE_RATE);
 
     // Apply inverse FFT
     i_cooley_tukey_iterative(freq_domain, N);
@@ -494,7 +516,9 @@ int main() {
         time_domain[i] = freq_domain[i].real;
     }
 
-    play_sound(time_domain, N, (double)N / SAMPLE_RATE);
+    // play_sound(time_domain, N, (double)N / SAMPLE_RATE);
+    play_sound(time_domain, N, 3);
+    
     
     return 1;
 
