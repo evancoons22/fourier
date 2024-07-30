@@ -8,13 +8,82 @@
 
 #define SAMPLE_RATE 44100
 #define FRAMES_PER_BUFFER 256
-#define N 64  // FFT size
+#define N 1024  // FFT size
 #define WINDOW_SIZE N
 #define OVERLAP (N / 2)  // 50% overlap
 #define PI 3.14159265358979323846
 
 float circular_buffer[N * 2];
 int buffer_pos = 0;
+
+typedef struct {
+    double *buffer;
+    int bufferSize;
+    int position;
+} PlaybackData;
+
+static int paCallbackPlay(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *userData) {
+    PlaybackData *data = (PlaybackData*)userData; // cast back to our Playbackdata struct (because we passed a pointer) 
+    float *out = (float*)outputBuffer; // Cast outputBuffer to a float pointer
+    (void) inputBuffer; // Prevent unused variable warning
+
+    for (unsigned long i=0; i<framesPerBuffer; i++) {
+        if (data->position >= data->bufferSize) {
+            data->position = 0; // Loop the sound
+        }
+        *out++ = (float)data->buffer[data->position++]; // Left channel
+        *out++ = (float)data->buffer[data->position-1]; // Right channel (duplicate for stereo)
+    }
+
+    return paContinue;
+}
+
+void play_sound(double *buffer, int bufferSize, double duration) {
+    PaStream *stream;
+    PaError err;
+    PlaybackData data;
+
+    data.buffer = buffer;
+    data.bufferSize = bufferSize;
+    data.position = 0;
+
+    err = Pa_Initialize();
+    if (err != paNoError) goto error;
+
+    err = Pa_OpenDefaultStream(&stream,
+                               0,          // no input channels
+                               2,          // stereo output
+                               paFloat32,  // 32 bit floating point output
+                               SAMPLE_RATE,
+                               FRAMES_PER_BUFFER,
+                               paCallbackPlay,
+                               &data);
+    if (err != paNoError) goto error;
+
+    err = Pa_StartStream(stream);
+    if (err != paNoError) goto error;
+
+    Pa_Sleep(duration * 1000); // Sleep for the duration of the sound
+
+    err = Pa_StopStream(stream);
+    if (err != paNoError) goto error;
+
+    err = Pa_CloseStream(stream);
+    if (err != paNoError) goto error;
+
+    Pa_Terminate();
+    return;
+
+error:
+    Pa_Terminate();
+    fprintf(stderr, "An error occurred while using the portaudio stream\n");
+    fprintf(stderr, "Error number: %d\n", err);
+    fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
+}
 
 static int paCallback(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
@@ -233,7 +302,7 @@ void cooley_tukey_iterative(complex *x, int n) {
         }
     }
 
-    // main loop, notice step *= 2
+    // main loop
     for (int step = 2; step <= n; step *= 2) {
         double angle = -2 * PI / step;
         complex w = complex_from_polar(1.0, angle);
@@ -250,6 +319,44 @@ void cooley_tukey_iterative(complex *x, int n) {
                 w_k = complex_mul(w_k, w);
             }
         }
+    }
+}
+
+void i_cooley_tukey_iterative(complex *X, int n) {
+    // Bit-reversal permutation
+    for (int i = 0; i < n; i++) {
+        int j = 0;
+        for (int k = 0; k < log2(n); k++) {
+            j = (j << 1) | ((i >> k) & 1);
+        }
+        if (i < j) {
+            complex temp = X[i];
+            X[i] = X[j];
+            X[j] = temp;
+        }
+    }
+
+    // iterative inverse cooley-tukey
+    for (int step = 2; step <= n; step *= 2) {
+        double angle = 2 * PI / step;  // Note the positive angle for inverse FFT
+        complex w = {cos(angle), sin(angle)};
+        
+        for (int k = 0; k < n; k += step) {
+            complex w_k = {1, 0}; // Start with w^0 = 1
+            
+            for (int j = 0; j < step / 2; j++) {
+                complex t = complex_mul(w_k, X[k + j + step/2]);
+                complex u = X[k + j];
+                X[k + j] = complex_add(u, t);
+                X[k + j + step/2] = complex_sub(u, t);
+                w_k = complex_mul(w_k, w);
+            }
+        }
+    }
+
+    for (int i = 0; i < n; i++) {
+        X[i].real /= n;
+        X[i].imag /= n;
     }
 }
 
@@ -298,8 +405,6 @@ void print_to_terminal(complex *x, int n) {
     }
 }
 
-
-
 // Generate a single random sample
 double generate_random_sample() {
     double sample = 0;
@@ -328,13 +433,79 @@ void get_window(complex *window) {
         window[i].imag = 0;
     }
 }
+
+// Generate sine wave
+void generate_sine(double *buffer, int n) {
+    for (int i = 0; i < n; i++) {
+        buffer[i] = sin(2 * PI * i / n);
+    }
+}
+
+// Generate square wave
+void generate_square(double *buffer, int n) {
+    for (int i = 0; i < n; i++) {
+        buffer[i] = (i < n / 2) ? 1.0 : -1.0;
+    }
+}
+
+// Generate sawtooth wave
+void generate_sawtooth(double *buffer, int n) {
+    for (int i = 0; i < n; i++) {
+        buffer[i] = 2.0 * (i / (double)n) - 1.0;
+    }
+}
+
+// Generate triangle wave
+void generate_triangle(double *buffer, int n) {
+    for (int i = 0; i < n; i++) {
+        if (i < n / 2) {
+            buffer[i] = 4.0 * i / n - 1.0;
+        } else {
+            buffer[i] = 3.0 - 4.0 * i / n;
+        }
+    }
+}
+
 int main() { 
+    // --------------------------- Signal generation ------------------------------
+    double time_domain[N];
+    complex freq_domain[N];
+
+    // Generate a sawtooth wave
+    generate_sawtooth(time_domain, N);
+
+    // Convert to complex numbers for FFT
+    for (int i = 0; i < N; i++) {
+        freq_domain[i].real = time_domain[i];
+        freq_domain[i].imag = 0;
+    }
+
+    // Apply FFT
+    cooley_tukey_iterative(freq_domain, N);
+
+    // Here you could modify freq_domain for various effects
+    print_to_terminal(freq_domain, N);
+
+    // Apply inverse FFT
+    i_cooley_tukey_iterative(freq_domain, N);
+
+    // Convert back to real numbers
+    for (int i = 0; i < N; i++) {
+        time_domain[i] = freq_domain[i].real;
+    }
+
+    play_sound(time_domain, N, (double)N / SAMPLE_RATE);
+    
+    return 1;
+
+    //--------------------------- Port audio io ------------------------------------
+    // listens to audio input
      PaStream *stream;
     PaError err;
 
+    // portaudio boiler plate
     err = Pa_Initialize();
     if (err != paNoError) goto error;
-
     err = Pa_OpenDefaultStream(&stream,
                                1,           // input channel count
                                0,           // output channel count
@@ -344,12 +515,11 @@ int main() {
                                paCallback,
                                NULL);
     if (err != paNoError) goto error;
-
     err = Pa_StartStream(stream);
     if (err != paNoError) goto error;
-
     complex window[WINDOW_SIZE];
 
+    // translate signals from audio input using port audio
     while(1) {
         // Get window of samples
         get_window(window);
@@ -358,7 +528,7 @@ int main() {
         cooley_tukey_iterative(window, WINDOW_SIZE);
 
         // Print results
-        print_to_terminal(window, WINDOW_SIZE);
+        // print_to_terminal(window, WINDOW_SIZE);
 
         usleep(100000);  // 0.1 second delay
     }
@@ -379,7 +549,9 @@ int main() {
         fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
         return -1;
 
-    // translate random signals
+
+    //--------------------------- Random signals ------------------------------------
+    // translate random signals, version 1
     complex signal[N];
     while(0) {
         generate_random_signal(signal, N, 3);
