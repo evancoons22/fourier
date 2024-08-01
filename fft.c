@@ -22,18 +22,6 @@ typedef struct {
     int position;
 } PlaybackData;
 
-typedef struct {
-    double frequency;
-    double amplitude;
-    int waveform_type;  // 0: sine, 1: square, 2: sawtooth, 3: triangle
-    double filter_cutoff;
-    // Add more parameters as needed
-} SynthParams;
-
-typedef struct {
-    SynthParams params;
-    double phase;
-} SynthData;
 
 static int paCallbackPlay(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
@@ -55,48 +43,6 @@ static int paCallbackPlay(const void *inputBuffer, void *outputBuffer,
     return paContinue;
 }
 
-double generate_sample(SynthData *data) {
-    double sample = 0.0;
-    double t = data->phase / SAMPLE_RATE;
-    
-    switch(data->params.waveform_type) {
-        case 0:  // Sine
-            sample = sin(2 * M_PI * data->params.frequency * t);
-            break;
-        case 1:  // Square
-            sample = (sin(2 * M_PI * data->params.frequency * t) > 0) ? 1.0 : -1.0;
-            break;
-        case 2:  // Sawtooth
-            sample = 2.0 * (data->params.frequency * t - floor(0.5 + data->params.frequency * t));
-            break;
-        case 3:  // Triangle
-            sample = fabs(4.0 * (data->params.frequency * t - floor(0.5 + data->params.frequency * t))) - 1.0;
-            break;
-    }
-    
-    data->phase += 2 * M_PI * data->params.frequency / SAMPLE_RATE;
-    if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
-    
-    return sample * data->params.amplitude;
-}
-
-static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
-                      unsigned long framesPerBuffer,
-                      const PaStreamCallbackTimeInfo* timeInfo,
-                      PaStreamCallbackFlags statusFlags,
-                      void *userData) {
-    SynthData *data = (SynthData*)userData;
-    float *out = (float*)outputBuffer;
-    (void) inputBuffer; // Prevent unused variable warning
-
-    for (unsigned long i=0; i<framesPerBuffer; i++) {
-        double sample = generate_sample(data);
-        *out++ = (float)sample;  // Left channel
-        *out++ = (float)sample;  // Right channel
-    }
-
-    return paContinue;
-}
 
 void play_sound(double *buffer, int bufferSize, double duration) {
     PaStream *stream;
@@ -543,6 +489,70 @@ void low_pass_filter(complex *X, int n, double cutoff_frequency, double sample_r
     }
 }
 
+
+typedef struct {
+    double frequency;
+    double amplitude;
+    int waveform_type;  // 0: sine, 1: square, 2: sawtooth, 3: triangle
+    double filter_cutoff;
+    // Add more parameters as needed
+    double lfo_frequency;
+    double lfo_depth;
+} SynthParams;
+
+
+typedef struct {
+    SynthParams params;
+    double phase;
+} SynthData;
+
+double generate_sample(SynthData *data) {
+    double sample = 0.0;
+    // double t = data->phase / SAMPLE_RATE;
+
+   double t = data->phase / SAMPLE_RATE;
+    double lfo = sin(2 * M_PI * data->params.lfo_frequency * t);
+    double modulated_freq = data->params.frequency + (lfo * data->params.lfo_depth);
+    
+    switch(data->params.waveform_type) {
+        case 0:  // Sine
+            sample = sin(2 * M_PI * modulated_freq * t);
+            break;
+        case 1:  // Square
+            sample = (sin(2 * M_PI * modulated_freq * t) > 0) ? 1.0 : -1.0;
+            break;
+        case 2:  // Sawtooth
+            sample = 2.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t));
+            break;
+        case 3:  // Triangle
+            sample = fabs(4.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t))) - 1.0;
+            break;
+    }
+    
+    data->phase += 2 * M_PI * modulated_freq / SAMPLE_RATE;
+    if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
+    
+    return sample * data->params.amplitude;
+}
+
+static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *userData) {
+    SynthData *data = (SynthData*)userData;
+    float *out = (float*)outputBuffer;
+    (void) inputBuffer; // Prevent unused variable warning
+
+    for (unsigned long i=0; i<framesPerBuffer; i++) {
+        double sample = generate_sample(data);
+        *out++ = (float)sample;  // Left channel
+        *out++ = (float)sample;  // Right channel
+    }
+
+    return paContinue;
+}
+
 void play_sound_stream() {
     PaStream *stream;
     PaError err;
@@ -581,6 +591,7 @@ error:
     fprintf(stderr, "Error number: %d\n", err);
     fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
 }
+
 
 
 
