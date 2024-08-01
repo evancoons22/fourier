@@ -214,8 +214,6 @@ int is_power_of_two(int x) {
     return (x > 0) && ((x & (x-1)) == 0);
 }  
 
-
-
 // Faster random number generator
 static unsigned int seed = 1;
 inline static unsigned int fast_rand() {
@@ -239,58 +237,6 @@ void generate_random_signal(complex *signal, int n, int num_frequencies) {
         }
     }
 }
-void cooley_tukey_rec(complex *x, complex *X, int n) { 
-    // if the length is one, return the term itself
-    if (n == 1) {  
-        X[0] = x[0];
-        return;
-    } 
-
-    // allocate memory dynamically
-    complex *even = (complex *)malloc(n/2 * sizeof(complex));
-    complex *odd = (complex *)malloc(n/2 * sizeof(complex));
-    complex *even_transformed = (complex *)malloc(n/2 * sizeof(complex));
-    complex *odd_transformed = (complex *)malloc(n/2 * sizeof(complex));
-
-    //complex even[n/2];
-    //complex odd[n/2];
-    
-    int even_index = 0, odd_index = 0;
-
-    // split into even and odd problems
-    for (int i = 0; i < n; i++) { 
-        if (i % 2 == 0) { 
-            even[even_index++] = x[i];
-        } else { 
-            odd[odd_index++] = x[i];
-        } 
-    } 
-
-    // dynamic allocation of memory
-
-    // create 2 arrays for the transformed inputs
-    // complex even_transformed[n/2];
-    // complex odd_transformed[n/2];
-
-    // call recursion again
-    cooley_tukey_rec(even, even_transformed, n/2);
-    cooley_tukey_rec(odd, odd_transformed, n/2);
-
-    // combine 2 arrays
-    for (size_t k = 0; k < n / 2; k++) { 
-        double angle = -2 * PI / n * k;
-        complex twiddle = complex_from_polar(1.0, angle);
-        complex t = complex_mul(twiddle, odd_transformed[k]);
-
-        X[k] =  complex_add(even_transformed[k], t);
-        X[k + n / 2] = complex_sub(even_transformed[k], t);
-    } 
-
-    free(even);
-    free(odd);
-    free(even_transformed);
-    free(odd_transformed);
-} 
 
 // in this better implementation, the input is not preserved
 void cooley_tukey_iterative(complex *x, int n) {
@@ -361,17 +307,6 @@ void i_cooley_tukey_iterative(complex *X, int n) {
         X[i].imag /= n;
     }
 }
-
-void cooley_tukey(complex *x, complex *X, int n) { 
-    if (!is_power_of_two(n)) { 
-        fprintf(stderr, "Error: FFT length must be a power of 2\n");
-        return;
-    } 
-
-    complex y[n];
-
-    cooley_tukey_rec(y, X, n);
-} 
 
 
 void print_to_terminal(complex *x, int n) {
@@ -490,30 +425,74 @@ void low_pass_filter(complex *X, int n, double cutoff_frequency, double sample_r
 }
 
 
+
 typedef struct {
     double frequency;
     double amplitude;
-    int waveform_type;  // 0: sine, 1: square, 2: sawtooth, 3: triangle
+    int waveform_type;
     double filter_cutoff;
-    // Add more parameters as needed
+    
+    // LFO parameters
     double lfo_frequency;
     double lfo_depth;
+    
+    // LFO modulation parameters
+    double lfo_freq_mod_rate;
+    double lfo_freq_mod_depth;
+    
+    // LFO envelope parameters
+    double lfo_envelope_attack;
+    double lfo_envelope_decay;
+    double lfo_envelope_sustain;
+    double lfo_envelope_release;
 } SynthParams;
 
 
 typedef struct {
     SynthParams params;
     double phase;
+    
+    // New fields for LFO and envelope
+    double lfo_phase;
+    double lfo_envelope_value;
+    double note_on_time;
 } SynthData;
+
+
+double apply_envelope(SynthData *data, double current_time) {
+    double elapsed = current_time - data->note_on_time;
+    double attack = data->params.lfo_envelope_attack;
+    double decay = data->params.lfo_envelope_decay;
+    double sustain = data->params.lfo_envelope_sustain;
+    // double release = data->params.lfo_envelope_release;
+
+    if (elapsed < attack) {
+        return elapsed / attack;
+    } else if (elapsed < attack + decay) {
+        return 1.0 - ((elapsed - attack) / decay) * (1.0 - sustain);
+    } else {
+        return sustain;
+    }
+    // Note: Release is not implemented here as it requires note-off information
+}
 
 double generate_sample(SynthData *data) {
     double sample = 0.0;
-    // double t = data->phase / SAMPLE_RATE;
-
-   double t = data->phase / SAMPLE_RATE;
-    double lfo = sin(2 * M_PI * data->params.lfo_frequency * t);
-    double modulated_freq = data->params.frequency + (lfo * data->params.lfo_depth);
+    double t = data->phase / SAMPLE_RATE;
     
+    // Apply LFO with separate phase, modulation, and envelope
+    double lfo_freq_mod = sin(2 * M_PI * data->params.lfo_freq_mod_rate * t) * data->params.lfo_freq_mod_depth;
+    double lfo_freq = data->params.lfo_frequency + lfo_freq_mod;
+    double lfo = sin(data->lfo_phase);
+    
+    // Apply envelope to LFO
+    double envelope = apply_envelope(data, t);
+    double lfo_with_envelope = lfo * data->params.lfo_depth * envelope;
+    
+    // Calculate modulated frequency
+    double modulated_freq = data->params.frequency + lfo_with_envelope;
+    
+    // Generate waveform using modulated frequency
     switch(data->params.waveform_type) {
         case 0:  // Sine
             sample = sin(2 * M_PI * modulated_freq * t);
@@ -529,8 +508,13 @@ double generate_sample(SynthData *data) {
             break;
     }
     
+    // Update phases
     data->phase += 2 * M_PI * modulated_freq / SAMPLE_RATE;
+    data->lfo_phase += 2 * M_PI * lfo_freq / SAMPLE_RATE;
+    
+    // Wrap phases
     if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
+    if (data->lfo_phase >= 2 * M_PI) data->lfo_phase -= 2 * M_PI;
     
     return sample * data->params.amplitude;
 }
@@ -556,7 +540,28 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
 void play_sound_stream() {
     PaStream *stream;
     PaError err;
-    SynthData data = {{440.0, 0.5, 0, 1000.0}, 0.0};  // Initial parameters
+
+    SynthData data = {
+        {
+            240.0,  // frequency
+            0.5,    // amplitude
+            0,      // waveform_type
+            1000.0, // filter_cutoff
+            5.0,    // lfo_frequency
+            10.0,   // lfo_depth
+            0.1,    // lfo_freq_mod_rate
+            0.5,    // lfo_freq_mod_depth
+            0.1,    // lfo_envelope_attack
+            0.2,    // lfo_envelope_decay
+            0.7,    // lfo_envelope_sustain
+            0.3     // lfo_envelope_release
+        },
+        0.0,  // phase
+        0.0,  // lfo_phase
+        0.0,  // lfo_envelope_value
+        0.0   // note_on_time
+    };
+
 
     err = Pa_Initialize();
     if (err != paNoError) goto error;
@@ -569,7 +574,10 @@ void play_sound_stream() {
                                FRAMES_PER_BUFFER,
                                paCallbackSynth,
                                &data);
+
     if (err != paNoError) goto error;
+
+    data.note_on_time = Pa_GetStreamTime(stream);
 
     err = Pa_StartStream(stream);
     if (err != paNoError) goto error;
@@ -598,7 +606,7 @@ error:
 int main() { 
     // --------------------------- play stream, no fft filters yet ------------------------------
     play_sound_stream();
-    return 1;
+    return 0;
     
     // --------------------------- Signal generation and play ------------------------------
     double time_domain[N];
