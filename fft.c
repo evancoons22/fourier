@@ -4,6 +4,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <portaudio.h>
+#include <time.h>
 
 
 #define SAMPLE_RATE 44100
@@ -465,7 +466,13 @@ double apply_envelope(SynthData *data, double current_time) {
     double decay = data->params.lfo_envelope_decay;
     double sustain = data->params.lfo_envelope_sustain;
     // double release = data->params.lfo_envelope_release;
+    //
+    if (elapsed < 0) {
+        elapsed = 0; // Ensure elapsed time is not negative
+    }
 
+    // printf("envelope data. current_time =  %f: elapsed = %f, attack = %f, decay = %f, sustain = %f\n", current_time, elapsed, attack, decay, sustain);
+    // printf("note on time = %f\n", data->note_on_time);
     if (elapsed < attack) {
         return elapsed / attack;
     } else if (elapsed < attack + decay) {
@@ -476,10 +483,14 @@ double apply_envelope(SynthData *data, double current_time) {
     // Note: Release is not implemented here as it requires note-off information
 }
 
+clock_t start_time;
+
 double generate_sample(SynthData *data) {
     double sample = 0.0;
-    double t = data->phase / SAMPLE_RATE;
-    
+    // double t = data->phase / SAMPLE_RATE;
+    // double t = Pa_GetStreamTime(NULL) - data->note_on_time;  // Calculate relative time, returns unix time? 
+    double t = ((double)(clock() - start_time)) / CLOCKS_PER_SEC;  // Calculate relative time
+
     // Apply LFO with separate phase, modulation, and envelope
     double lfo_freq_mod = sin(2 * M_PI * data->params.lfo_freq_mod_rate * t) * data->params.lfo_freq_mod_depth;
     double lfo_freq = data->params.lfo_frequency + lfo_freq_mod;
@@ -491,6 +502,7 @@ double generate_sample(SynthData *data) {
     
     // Calculate modulated frequency
     double modulated_freq = data->params.frequency + lfo_with_envelope;
+    // printf("\tmodulated freq: %f = freq (%f) + lfo (%f)\n", modulated_freq, data->params.frequency, lfo_with_envelope);
     
     // Generate waveform using modulated frequency
     switch(data->params.waveform_type) {
@@ -515,6 +527,10 @@ double generate_sample(SynthData *data) {
     // Wrap phases
     if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
     if (data->lfo_phase >= 2 * M_PI) data->lfo_phase -= 2 * M_PI;
+
+    // printf("Sample: %f, Phase: %f, LFO Phase: %f, Envelope: %f\n", sample, data->phase, data->lfo_phase, envelope);
+
+    // Apply filter
     
     return sample * data->params.amplitude;
 }
@@ -532,14 +548,20 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
         double sample = generate_sample(data);
         *out++ = (float)sample;  // Left channel
         *out++ = (float)sample;  // Right channel
+       // if (i == 10) { 
+       //     exit(EXIT_FAILURE);
+       // } 
+ 
     }
 
     return paContinue;
 }
 
+
 void play_sound_stream() {
     PaStream *stream;
     PaError err;
+
 
     SynthData data = {
         {
@@ -577,7 +599,8 @@ void play_sound_stream() {
 
     if (err != paNoError) goto error;
 
-    data.note_on_time = Pa_GetStreamTime(stream);
+    // data.note_on_time = Pa_GetStreamTime(stream);
+    start_time = clock();
 
     err = Pa_StartStream(stream);
     if (err != paNoError) goto error;
