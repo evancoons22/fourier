@@ -22,6 +22,19 @@ typedef struct {
     int position;
 } PlaybackData;
 
+typedef struct {
+    double frequency;
+    double amplitude;
+    int waveform_type;  // 0: sine, 1: square, 2: sawtooth, 3: triangle
+    double filter_cutoff;
+    // Add more parameters as needed
+} SynthParams;
+
+typedef struct {
+    SynthParams params;
+    double phase;
+} SynthData;
+
 static int paCallbackPlay(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
                       const PaStreamCallbackTimeInfo* timeInfo,
@@ -37,6 +50,49 @@ static int paCallbackPlay(const void *inputBuffer, void *outputBuffer,
         }
         *out++ = (float)data->buffer[data->position++]; // Left channel
         *out++ = (float)data->buffer[data->position-1]; // Right channel (duplicate for stereo)
+    }
+
+    return paContinue;
+}
+
+double generate_sample(SynthData *data) {
+    double sample = 0.0;
+    double t = data->phase / SAMPLE_RATE;
+    
+    switch(data->params.waveform_type) {
+        case 0:  // Sine
+            sample = sin(2 * M_PI * data->params.frequency * t);
+            break;
+        case 1:  // Square
+            sample = (sin(2 * M_PI * data->params.frequency * t) > 0) ? 1.0 : -1.0;
+            break;
+        case 2:  // Sawtooth
+            sample = 2.0 * (data->params.frequency * t - floor(0.5 + data->params.frequency * t));
+            break;
+        case 3:  // Triangle
+            sample = fabs(4.0 * (data->params.frequency * t - floor(0.5 + data->params.frequency * t))) - 1.0;
+            break;
+    }
+    
+    data->phase += 2 * M_PI * data->params.frequency / SAMPLE_RATE;
+    if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
+    
+    return sample * data->params.amplitude;
+}
+
+static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
+                      unsigned long framesPerBuffer,
+                      const PaStreamCallbackTimeInfo* timeInfo,
+                      PaStreamCallbackFlags statusFlags,
+                      void *userData) {
+    SynthData *data = (SynthData*)userData;
+    float *out = (float*)outputBuffer;
+    (void) inputBuffer; // Prevent unused variable warning
+
+    for (unsigned long i=0; i<framesPerBuffer; i++) {
+        double sample = generate_sample(data);
+        *out++ = (float)sample;  // Left channel
+        *out++ = (float)sample;  // Right channel
     }
 
     return paContinue;
@@ -487,8 +543,53 @@ void low_pass_filter(complex *X, int n, double cutoff_frequency, double sample_r
     }
 }
 
+void play_sound_stream() {
+    PaStream *stream;
+    PaError err;
+    SynthData data = {{440.0, 0.5, 0, 1000.0}, 0.0};  // Initial parameters
+
+    err = Pa_Initialize();
+    if (err != paNoError) goto error;
+
+    err = Pa_OpenDefaultStream(&stream,
+                               0,          // no input channels
+                               2,          // stereo output
+                               paFloat32,  // 32 bit floating point output
+                               SAMPLE_RATE,
+                               FRAMES_PER_BUFFER,
+                               paCallbackSynth,
+                               &data);
+    if (err != paNoError) goto error;
+
+    err = Pa_StartStream(stream);
+    if (err != paNoError) goto error;
+
+    printf("Playing. Ctrl + C to stop.\n");
+    getchar();
+
+    err = Pa_StopStream(stream);
+    if (err != paNoError) goto error;
+
+    err = Pa_CloseStream(stream);
+    if (err != paNoError) goto error;
+
+    Pa_Terminate();
+
+error:
+    Pa_Terminate();
+    fprintf(stderr, "An error occurred while using the portaudio stream\n");
+    fprintf(stderr, "Error number: %d\n", err);
+    fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
+}
+
+
+
 int main() { 
-    // --------------------------- Signal generation ------------------------------
+    // --------------------------- play stream, no fft filters yet ------------------------------
+    play_sound_stream();
+    return 1;
+    
+    // --------------------------- Signal generation and play ------------------------------
     double time_domain[N];
     complex freq_domain[N];
 
