@@ -5,10 +5,12 @@
 #include <unistd.h>
 #include <portaudio.h>
 #include <time.h>
+#include <string.h>
 
 
 #define SAMPLE_RATE 44100
 #define FRAMES_PER_BUFFER 256
+#define BUFFER_SIZE 8192  // Adjust this value as needed
 #define N 1024  // FFT size
 #define WINDOW_SIZE N
 #define OVERLAP (N / 2)  // 50% overlap
@@ -375,7 +377,7 @@ void get_window(complex *window) {
 // Generate sine wave
 void generate_sine(double *buffer, int n) {
     for (int i = 0; i < n; i++) {
-        buffer[i] = sin(2 * PI * i / n);
+        buffer[i] = sin(2 * PI * i * 2 / n);
     }
 }
 
@@ -456,12 +458,16 @@ typedef struct {
     // New fields for LFO and envelope
     double lfo_phase;
     double lfo_envelope_value;
-    double note_on_time;
+    // double note_on_time;
+    double start_time;
+    float buffer[BUFFER_SIZE];
+    int buffer_index;
+    int samples_generated;
 } SynthData;
 
 
 double apply_envelope(SynthData *data, double current_time) {
-    double elapsed = current_time - data->note_on_time;
+    double elapsed = current_time - data->start_time;
     double attack = data->params.lfo_envelope_attack;
     double decay = data->params.lfo_envelope_decay;
     double sustain = data->params.lfo_envelope_sustain;
@@ -483,42 +489,42 @@ double apply_envelope(SynthData *data, double current_time) {
     // Note: Release is not implemented here as it requires note-off information
 }
 
-clock_t start_time;
+// clock_t start_time;
 
-double generate_sample(SynthData *data) {
+double generate_sample(SynthData *data, double current_time) {
     double sample = 0.0;
     // double t = data->phase / SAMPLE_RATE;
-    // double t = Pa_GetStreamTime(NULL) - data->note_on_time;  // Calculate relative time, returns unix time? 
-    double t = ((double)(clock() - start_time)) / CLOCKS_PER_SEC;  // Calculate relative time
+    double t = current_time - data->start_time;
+    // double t = Pa_GetStreamTime(NULL) - data->note_on_time;  // Calculate relative time, returns unix time? This doesn't work
+    // double t = ((double)(clock() - start_time)) / CLOCKS_PER_SEC;  // Calculate relative time, THIS WORKS!
 
     // Apply LFO with separate phase, modulation, and envelope
     double lfo_freq_mod = sin(2 * M_PI * data->params.lfo_freq_mod_rate * t) * data->params.lfo_freq_mod_depth;
     double lfo_freq = data->params.lfo_frequency + lfo_freq_mod;
     double lfo = sin(data->lfo_phase);
-    
     // Apply envelope to LFO
-    double envelope = apply_envelope(data, t);
+    double envelope = apply_envelope(data, current_time);
     double lfo_with_envelope = lfo * data->params.lfo_depth * envelope;
     
     // Calculate modulated frequency
-    double modulated_freq = data->params.frequency + lfo_with_envelope;
+   double modulated_freq = data->params.frequency + lfo_with_envelope;
     // printf("\tmodulated freq: %f = freq (%f) + lfo (%f)\n", modulated_freq, data->params.frequency, lfo_with_envelope);
     
     // Generate waveform using modulated frequency
-    switch(data->params.waveform_type) {
-        case 0:  // Sine
-            sample = sin(2 * M_PI * modulated_freq * t);
-            break;
-        case 1:  // Square
-            sample = (sin(2 * M_PI * modulated_freq * t) > 0) ? 1.0 : -1.0;
-            break;
-        case 2:  // Sawtooth
-            sample = 2.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t));
-            break;
-        case 3:  // Triangle
-            sample = fabs(4.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t))) - 1.0;
-            break;
-    }
+   switch(data->params.waveform_type) {
+       case 0:  // Sine
+           sample = sin(2 * M_PI * modulated_freq * t);
+           break;
+       case 1:  // Square
+           sample = (sin(2 * M_PI * modulated_freq * t) > 0) ? 1.0 : -1.0;
+           break;
+       case 2:  // Sawtooth
+           sample = 2.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t));
+           break;
+       case 3:  // Triangle
+           sample = fabs(4.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t))) - 1.0;
+           break;
+   }
     
     // Update phases
     data->phase += 2 * M_PI * modulated_freq / SAMPLE_RATE;
@@ -528,11 +534,24 @@ double generate_sample(SynthData *data) {
     if (data->phase >= 2 * M_PI) data->phase -= 2 * M_PI;
     if (data->lfo_phase >= 2 * M_PI) data->lfo_phase -= 2 * M_PI;
 
-    // printf("Sample: %f, Phase: %f, LFO Phase: %f, Envelope: %f\n", sample, data->phase, data->lfo_phase, envelope);
 
     // Apply filter
+    // return sin(2 * M_PI * data->params.frequency * t) * data->params.amplitude;
+
     
-    return sample * data->params.amplitude;
+      return sample * data->params.amplitude;
+}
+
+void fill_buffer(SynthData *data, double current_time) {
+    int samples_to_generate = BUFFER_SIZE - data->samples_generated;
+    
+    for (int i = 0; i < samples_to_generate; i++) {
+        double t = current_time + (double)(data->samples_generated + i) / SAMPLE_RATE;
+        double sample = generate_sample(data, t);
+        data->buffer[(data->buffer_index + data->samples_generated + i) % BUFFER_SIZE] = (float)sample;
+    }
+    
+    data->samples_generated += samples_to_generate;
 }
 
 static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
@@ -544,17 +563,45 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
     float *out = (float*)outputBuffer;
     (void) inputBuffer; // Prevent unused variable warning
 
-    for (unsigned long i=0; i<framesPerBuffer; i++) {
-        double sample = generate_sample(data);
-        *out++ = (float)sample;  // Left channel
-        *out++ = (float)sample;  // Right channel
-       // if (i == 10) { 
-       //     exit(EXIT_FAILURE);
-       // } 
- 
+    //memset(out, 0, framesPerBuffer * 2 * sizeof(float));
+
+    double current_time = timeInfo->currentTime;
+
+    if (data->samples_generated < framesPerBuffer) {
+        fill_buffer(data, current_time);
+    }
+
+    // Copy samples from the buffer to the output
+    for (unsigned long i = 0; i < framesPerBuffer; i++) {
+        float sample = data->buffer[data->buffer_index];
+        *out++ = sample;  // Left channel
+        *out++ = sample;  // Right channel
+
+        data->buffer_index = (data->buffer_index + 1) % BUFFER_SIZE;
+        data->samples_generated--;
+    }
+
+    // Refill the buffer if it's running low
+    if (data->samples_generated < BUFFER_SIZE / 2) {
+        fill_buffer(data, current_time + (double)framesPerBuffer / SAMPLE_RATE);
     }
 
     return paContinue;
+
+   // static int call_count = 0;
+   // if (++call_count % 1000 == 0) {
+   //     printf("Time: %f, Frequency: %f, Amplitude: %f\n", 
+   //             current_time, data->params.frequency, data->params.amplitude);
+   // }
+
+   // for (unsigned long i=0; i<framesPerBuffer; i++) {
+   //     double sample = generate_sample(data, current_time + (double)i / SAMPLE_RATE);  
+   //     *out++ = (float)sample;  // Left channel
+   //     *out++ = (float)sample;  // Right channel
+ 
+   // }
+
+   // return paContinue;
 }
 
 
@@ -565,12 +612,12 @@ void play_sound_stream() {
 
     SynthData data = {
         {
-            240.0,  // frequency
-            0.5,    // amplitude
-            0,      // waveform_type
+            140.0,  // frequency
+            2.0,    // amplitude
+            3,      // waveform_type
             1000.0, // filter_cutoff
-            5.0,    // lfo_frequency
-            10.0,   // lfo_depth
+            2.0,    // lfo_frequency
+            0.0,   // lfo_depth
             0.1,    // lfo_freq_mod_rate
             0.5,    // lfo_freq_mod_depth
             0.1,    // lfo_envelope_attack
@@ -581,7 +628,7 @@ void play_sound_stream() {
         0.0,  // phase
         0.0,  // lfo_phase
         0.0,  // lfo_envelope_value
-        0.0   // note_on_time
+        0.0   // start_time
     };
 
 
@@ -600,7 +647,9 @@ void play_sound_stream() {
     if (err != paNoError) goto error;
 
     // data.note_on_time = Pa_GetStreamTime(stream);
-    start_time = clock();
+    //start_time = clock();
+    data.start_time = Pa_GetStreamTime(stream);
+
 
     err = Pa_StartStream(stream);
     if (err != paNoError) goto error;
@@ -636,7 +685,7 @@ int main() {
     complex freq_domain[N];
 
     // Generate a sawtooth wave
-    generate_sawtooth(time_domain, N);
+    generate_sine(time_domain, N);
 
     // Convert to complex numbers for FFT
     for (int i = 0; i < N; i++) {
