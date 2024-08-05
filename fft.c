@@ -1,4 +1,5 @@
 #include <stdio.h> 
+#include <pthread.h>
 #include <math.h>
 #include <stdlib.h>
 #include <time.h>
@@ -460,9 +461,17 @@ typedef struct {
     double lfo_envelope_value;
     // double note_on_time;
     double start_time;
-    float buffer[BUFFER_SIZE];
+    float buffer1[BUFFER_SIZE];
+    float buffer2[BUFFER_SIZE];
+    float *current_buffer;
+    float *next_buffer;
+
     int buffer_index;
     int samples_generated;
+
+    pthread_mutex_t buffer_mutex;
+    pthread_cond_t buffer_cond;
+    int buffer_ready;
 } SynthData;
 
 
@@ -477,8 +486,6 @@ double apply_envelope(SynthData *data, double current_time) {
         elapsed = 0; // Ensure elapsed time is not negative
     }
 
-    // printf("envelope data. current_time =  %f: elapsed = %f, attack = %f, decay = %f, sustain = %f\n", current_time, elapsed, attack, decay, sustain);
-    // printf("note on time = %f\n", data->note_on_time);
     if (elapsed < attack) {
         return elapsed / attack;
     } else if (elapsed < attack + decay) {
@@ -538,21 +545,125 @@ double generate_sample(SynthData *data, double current_time) {
     // Apply filter
     // return sin(2 * M_PI * data->params.frequency * t) * data->params.amplitude;
 
-    
       return sample * data->params.amplitude;
 }
 
+//void fill_buffer(SynthData *data, double current_time) {
+//    int samples_to_generate = BUFFER_SIZE - data->samples_generated;
+//    
+//    for (int i = 0; i < samples_to_generate; i++) {
+//        double t = current_time + (double)(data->samples_generated + i) / SAMPLE_RATE;
+//        double sample = generate_sample(data, t);
+//        data->buffer[(data->buffer_index + data->samples_generated + i) % BUFFER_SIZE] = (float)sample;
+//    }
+//    
+//    data->samples_generated += samples_to_generate;
+//}
+
 void fill_buffer(SynthData *data, double current_time) {
-    int samples_to_generate = BUFFER_SIZE - data->samples_generated;
-    
-    for (int i = 0; i < samples_to_generate; i++) {
-        double t = current_time + (double)(data->samples_generated + i) / SAMPLE_RATE;
-        double sample = generate_sample(data, t);
-        data->buffer[(data->buffer_index + data->samples_generated + i) % BUFFER_SIZE] = (float)sample;
+    for (unsigned long i = 0; i < BUFFER_SIZE; i++) {
+        data->next_buffer[i] = generate_sample(data, current_time + i / (double)SAMPLE_RATE);
     }
-    
-    data->samples_generated += samples_to_generate;
+    pthread_mutex_lock(&data->buffer_mutex);
+    data->buffer_ready = 1;
+    pthread_cond_signal(&data->buffer_cond);
+    pthread_mutex_unlock(&data->buffer_mutex);
 }
+
+
+void* generate_thread(void *arg) {
+    SynthData *data = (SynthData*)arg;
+    double current_time = 0.0;
+
+    while (1) {
+        pthread_mutex_lock(&data->buffer_mutex);
+        while (data->buffer_ready) {
+            pthread_cond_wait(&data->buffer_cond, &data->buffer_mutex);
+        }
+        pthread_mutex_unlock(&data->buffer_mutex);
+
+        fill_buffer(data, current_time);
+        current_time += (double)BUFFER_SIZE / SAMPLE_RATE;
+    }
+
+    return NULL;
+}
+
+
+
+#define FILL_SIZE BUFFER_SIZE / 4
+
+//void fill_next_buffer(SynthData *data,  double current_time) {
+//    for (int i = 0; i < FILL_SIZE; i++) {
+//        // twice the time out because we are generating in advance
+//        double t = current_time + 2 * (double) i / SAMPLE_RATE;
+//        double sample = generate_sample(data, t);
+//        // filling the next buffer the previous part is filled
+//        data->buffer[(data->buffer_index + FILL_SIZE + i) % BUFFER_SIZE] = (float)sample;
+//    }
+//    
+//}
+
+//static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
+//                      unsigned long framesPerBuffer,
+//                      const PaStreamCallbackTimeInfo* timeInfo,
+//                      PaStreamCallbackFlags statusFlags,
+//                      void *userData) {
+//    SynthData *data = (SynthData*)userData;
+//    float *out = (float*)outputBuffer;
+//    (void) inputBuffer; // Prevent unused variable warning
+//
+//    //memset(out, 0, framesPerBuffer * 2 * sizeof(float));
+//
+//    double current_time = timeInfo->currentTime;
+//
+//    if (data->samples_generated < framesPerBuffer) {
+//        fill_buffer(data, current_time);
+//    }
+//
+//    // Copy samples from the buffer to the output
+//    for (unsigned long i = 0; i < framesPerBuffer; i++) {
+//
+//        if (data->samples_generated == 0) {
+//            fprintf(stderr, "Buffer underflow detected\n");
+//            break;
+//        }
+//
+//        float sample = data->buffer[data->buffer_index];
+//
+//        if (sample > 1.0f || sample < -1.0f) {
+//            fprintf(stderr, "Audio clipping detected at index %d: %f\n", data->buffer_index, sample);
+//        }
+//
+//        *out++ = sample;  // Left channel
+//        *out++ = sample;  // Right channel
+//
+//        data->buffer_index = (data->buffer_index + 1) % BUFFER_SIZE;
+//        data->samples_generated--;
+//    }
+//
+//    // Refill the buffer if it's running low
+//    if (data->samples_generated < BUFFER_SIZE / 2) {
+//        fill_buffer(data, current_time + (double)framesPerBuffer / SAMPLE_RATE);
+//    }
+//
+//    return paContinue;
+//
+//   // static int call_count = 0;
+//   // if (++call_count % 1000 == 0) {
+//   //     printf("Time: %f, Frequency: %f, Amplitude: %f\n", 
+//   //             current_time, data->params.frequency, data->params.amplitude);
+//   // }
+//
+//   // for (unsigned long i=0; i<framesPerBuffer; i++) {
+//   //     double sample = generate_sample(data, current_time + (double)i / SAMPLE_RATE);  
+//   //     *out++ = (float)sample;  // Left channel
+//   //     *out++ = (float)sample;  // Right channel
+// 
+//   // }
+//
+//   // return paContinue;
+//}
 
 static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
                       unsigned long framesPerBuffer,
@@ -563,45 +674,45 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
     float *out = (float*)outputBuffer;
     (void) inputBuffer; // Prevent unused variable warning
 
-    //memset(out, 0, framesPerBuffer * 2 * sizeof(float));
-
-    double current_time = timeInfo->currentTime;
-
-    if (data->samples_generated < framesPerBuffer) {
-        fill_buffer(data, current_time);
-    }
+    pthread_mutex_lock(&data->buffer_mutex);
 
     // Copy samples from the buffer to the output
     for (unsigned long i = 0; i < framesPerBuffer; i++) {
-        float sample = data->buffer[data->buffer_index];
+        if (data->samples_generated == 0) {
+            // Switch buffers if current buffer is exhausted
+            float *temp = data->current_buffer;
+            data->current_buffer = data->next_buffer;
+            data->next_buffer = temp;
+            data->buffer_index = 0;
+            data->samples_generated = BUFFER_SIZE;
+            data->buffer_ready = 0;
+            pthread_cond_signal(&data->buffer_cond);
+        }
+
+        float sample = data->current_buffer[data->buffer_index];
         *out++ = sample;  // Left channel
         *out++ = sample;  // Right channel
 
-        data->buffer_index = (data->buffer_index + 1) % BUFFER_SIZE;
+        data->buffer_index++;
         data->samples_generated--;
     }
 
-    // Refill the buffer if it's running low
-    if (data->samples_generated < BUFFER_SIZE / 2) {
-        fill_buffer(data, current_time + (double)framesPerBuffer / SAMPLE_RATE);
-    }
+    pthread_mutex_unlock(&data->buffer_mutex);
 
     return paContinue;
+}
 
-   // static int call_count = 0;
-   // if (++call_count % 1000 == 0) {
-   //     printf("Time: %f, Frequency: %f, Amplitude: %f\n", 
-   //             current_time, data->params.frequency, data->params.amplitude);
-   // }
 
-   // for (unsigned long i=0; i<framesPerBuffer; i++) {
-   //     double sample = generate_sample(data, current_time + (double)i / SAMPLE_RATE);  
-   //     *out++ = (float)sample;  // Left channel
-   //     *out++ = (float)sample;  // Right channel
- 
-   // }
 
-   // return paContinue;
+void initialize_buffer(SynthData *data) {
+    data->buffer_index = 0;
+    data->samples_generated = BUFFER_SIZE;
+    data->current_buffer = data->buffer1;
+    data->next_buffer = data->buffer2;
+    pthread_mutex_init(&data->buffer_mutex, NULL);
+    pthread_cond_init(&data->buffer_cond, NULL);
+    data->buffer_ready = 0;
+    fill_buffer(data, 0.0);
 }
 
 
@@ -613,12 +724,12 @@ void play_sound_stream() {
     SynthData data = {
         {
             140.0,  // frequency
-            2.0,    // amplitude
+            1.0,    // amplitude
             3,      // waveform_type
             1000.0, // filter_cutoff
             2.0,    // lfo_frequency
-            0.0,   // lfo_depth
-            0.1,    // lfo_freq_mod_rate
+            1.0,   // lfo_depth
+            .1,    // lfo_freq_mod_rate
             0.5,    // lfo_freq_mod_depth
             0.1,    // lfo_envelope_attack
             0.2,    // lfo_envelope_decay
@@ -632,8 +743,14 @@ void play_sound_stream() {
     };
 
 
+
     err = Pa_Initialize();
+    initialize_buffer(&data);
     if (err != paNoError) goto error;
+
+    pthread_t thread;
+    pthread_create(&thread, NULL, generate_thread, &data);
+
 
     err = Pa_OpenDefaultStream(&stream,
                                0,          // no input channels
@@ -648,7 +765,7 @@ void play_sound_stream() {
 
     // data.note_on_time = Pa_GetStreamTime(stream);
     //start_time = clock();
-    data.start_time = Pa_GetStreamTime(stream);
+    // data.start_time = Pa_GetStreamTime(stream);
 
 
     err = Pa_StartStream(stream);
@@ -671,6 +788,7 @@ error:
     fprintf(stderr, "Error number: %d\n", err);
     fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
 }
+
 
 
 
