@@ -694,7 +694,7 @@ void play_sound_stream() {
     SynthData data = {
         {
             // C
-            65.81,  // frequency
+            130.81,  // frequency
             1.0,    // amplitude
             0,      // waveform_type
             1000.0, // filter_cutoff
@@ -719,7 +719,7 @@ void play_sound_stream() {
     SynthData data2 = {
         {
             // E
-           82.41,  // frequency
+            164.81,  // frequency
             1.0,    // amplitude
             0,      // waveform_type
             1000.0, // filter_cutoff
@@ -743,7 +743,7 @@ void play_sound_stream() {
     SynthData data3 = {
         {
             // G
-            98.00,  // frequency
+            196.00,  // frequency
             1.0,    // amplitude
             0,      // waveform_type
             1000.0, // filter_cutoff
