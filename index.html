@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebAssembly Example</title>
+</head>
+<body>
+    <h1>WebAssembly Example</h1>
+    <button id="runButton">Run</button>
+    <pre id="output"></pre>
+
+    <script>
+        const output = document.getElementById('output');
+        const runButton = document.getElementById('runButton');
+
+        // Load the Emscripten-generated script
+        const script = document.createElement('script');
+        script.src = 'fft.js';
+        document.body.appendChild(script);
+
+        script.onload = () => {
+            // Once the script is loaded, Module object is available
+            runButton.disabled = false;
+
+            runButton.onclick = () => {
+                // Redirect stdout to the output pre tag
+                Module.print = (text) => {
+                    output.textContent += text + '\n';
+                };
+                
+                // Call the main function (or any other function)
+                Module._main();
+            };
+        };
+    </script>
+</body>
+</html>
+

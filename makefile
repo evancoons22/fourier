@@ -7,7 +7,7 @@ CC = gcc
 CFLAGS = -Wall -O3
 
 # Libraries to link
-LIBS = -lm -lportaudio
+LIBS = -lm -lportaudio -lncurses
 
 # Source file
 SRC = fft.c

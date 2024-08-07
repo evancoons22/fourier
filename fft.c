@@ -7,6 +7,10 @@
 #include <portaudio.h>
 #include <time.h>
 #include <string.h>
+#include <ncurses.h>
+#include <unistd.h>
+
+
 
 
 #define SAMPLE_RATE 44100
@@ -815,12 +819,37 @@ error:
 }
 
 
+void print_params(MultiSynthData *data) {
+    // using ncurser this will be my simple terminal interface for now
+    printf("Frequency: %f\n", data->sounds[0].params.lfo_frequency);
+}
 
 
 
 int main() { 
     // --------------------------- play stream, no fft filters yet ------------------------------
     play_sound_stream();
+
+    // figure out how to get ncurses working with portaudio callback still going
+
+    initscr();
+    noecho();
+    cbreak();
+    timeout(100);
+
+    int ch;
+    while ((ch = getch()) != 'q') {
+        clear();
+        printw("Use keys to adjust parameters:\n");
+        printw("Frequency: [a] Increase  [z] Decrease\n");
+        printw("Amplitude: [s] Increase  [x] Decrease\n");
+        printw("Phase:     [d] Increase  [c] Decrease\n");
+        printw("Press 'q' to quit.\n");
+
+    }
+
+    endwin();
+    
     return 0;
     
     // --------------------------- Signal generation and play ------------------------------

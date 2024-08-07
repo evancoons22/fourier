@@ -1,0 +1,12 @@
+
+Compiling instructions
+1. need to compile portaudio to wasm
+2. install emscripten
+3. download portaudio and unzip https://files.portaudio.com/download.html
+4. cd portaudio
+5. emscripten ./configure 
+6. emmake make
+7. now you can compile fft.c to wasm with 
+    `emcc fft.c -o fft.html -Ipath/to/portaudio/include -Lpath/to/portaudio/lib -lportaudio -O3
+
+
