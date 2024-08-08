@@ -484,6 +484,7 @@ typedef struct {
 typedef struct { 
     SynthData sounds[MAX_SOUNDS];
     int num_sounds;
+    pthread_mutex_t mutex;
 } MultiSynthData;
 
 
@@ -673,6 +674,7 @@ void initialize_buffer(SynthData *data) {
     pthread_mutex_init(&data->buffer_mutex, NULL);
     pthread_cond_init(&data->buffer_cond, NULL);
     data->buffer_ready = 0;
+    // data->params.frequency = frequency;  
     fill_buffer(data, 0.0);
 }
 
@@ -683,12 +685,89 @@ void initialize_multi_buffer(MultiSynthData *data) {
     }
 }
 
+void add_synth(MultiSynthData *multi_data, SynthData *synth_data) {
+    pthread_mutex_lock(&multi_data->mutex);
+    if (multi_data->num_sounds < MAX_SOUNDS) {
+        multi_data->sounds[multi_data->num_sounds] = *synth_data;
+        // don't even need memcpy
+        //memcpy(&multi_data->sounds[multi_data->num_sounds], synth_data, sizeof(SynthData));
+        multi_data->num_sounds++;
+    }
+    pthread_mutex_unlock(&multi_data->mutex);
+}
+
+// this is a bad way to do this right now
+// really should be using a linked list or give each synth an id
+void remove_synth(MultiSynthData *multi_data, SynthData *synth_data) {
+    pthread_mutex_lock(&multi_data->mutex);
+    for (int i = 0; i < multi_data->num_sounds; i++) {
+        if (multi_data->sounds[i].params.frequency == synth_data->params.frequency) {
+            multi_data->num_sounds--;
+            for (int j = i; j < multi_data->num_sounds; j++) {
+                multi_data->sounds[j] = multi_data->sounds[j+1];
+            }
+            break;
+        }
+    }
+    pthread_mutex_unlock(&multi_data->mutex);
+}
+
+void initialize_multi_syth_data(MultiSynthData *data) {
+    data->num_sounds = 0;
+    pthread_mutex_init(&data->mutex, NULL);
+}
+
 void fill_multi_buffer(MultiSynthData *data, double current_time) {
     for (int i = 0; i < data->num_sounds; i++) {
         fill_buffer(&data->sounds[i], current_time);
     }
 }
 
+void* ncurses_thread(void *arg) {
+    MultiSynthData *multi_data = (MultiSynthData*)arg;
+    initscr();
+    noecho();
+    cbreak();
+    timeout(100); // Non-blocking input with a timeout
+
+    while (1) {
+        int ch = getch();
+        if (ch == 'q') {
+            break;
+        }
+        SynthData new_synth;
+        switch (ch) {
+            case 'a':
+                new_synth.params.frequency = 440.0f;
+                initialize_buffer(&new_synth);  // A4
+                add_synth(multi_data, &new_synth);
+                mvprintw(0, 0, "A pressed: 440Hz");
+                break;
+            case 's':
+                new_synth.params.frequency = 494.0f;
+                initialize_buffer(&new_synth);  // B4
+                add_synth(multi_data, &new_synth);
+                mvprintw(1, 0, "S pressed: 494Hz");
+                break;
+            case 'd':
+                new_synth.params.frequency = 523.0f;
+                initialize_buffer(&new_synth);  // C5
+                add_synth(multi_data, &new_synth);
+                mvprintw(2, 0, "D pressed: 523Hz");
+                break;
+            case 'f':
+                new_synth.params.frequency = 587.0f;
+                initialize_buffer(&new_synth);  // D5
+                add_synth(multi_data, &new_synth);
+                mvprintw(3, 0, "F pressed: 587Hz");
+                break;
+        }
+        refresh();
+    }
+
+    endwin();
+    return NULL;
+}
 
 void play_sound_stream() {
     PaStream *stream;
@@ -717,8 +796,6 @@ void play_sound_stream() {
         0.0   // start_time
     };
 
-    MultiSynthData multi_data;
-    multi_data.sounds[0] = data;
 
     SynthData data2 = {
         {
@@ -742,7 +819,6 @@ void play_sound_stream() {
         0.0   // start_time
     };
     
-    multi_data.sounds[1] = data2;
 
     SynthData data3 = {
         {
@@ -766,18 +842,28 @@ void play_sound_stream() {
         0.0   // start_time
     };
 
-    multi_data.sounds[2] = data3;
+    MultiSynthData multi_data;
+    initialize_multi_syth_data(&multi_data);
+    add_synth(&multi_data, &data);
+    //add_synth(&multi_data, &data2);
+    //add_synth(&multi_data, &data3);
 
-    multi_data.num_sounds = 3;
+    //multi_data.sounds[0] = data;
+    //multi_data.sounds[1] = data2;
+    //multi_data.sounds[2] = data3;
+
+    // print some multidata parameters
 
 
     err = Pa_Initialize();
-    // initialize_buffer(&data);
     initialize_multi_buffer(&multi_data);
     if (err != paNoError) goto error;
 
     pthread_t thread;
     pthread_create(&thread, NULL, generate_thread, &multi_data);
+
+    pthread_t ui_thread;
+    pthread_create(&ui_thread, NULL, ncurses_thread, &multi_data);
 
 
     err = Pa_OpenDefaultStream(&stream,
@@ -797,11 +883,13 @@ void play_sound_stream() {
 
 
     err = Pa_StartStream(stream);
-    Pa_Sleep(500);
+    //Pa_Sleep(500);
     if (err != paNoError) goto error;
+    
+    pthread_join(ui_thread, NULL);
 
-    printf("Playing. Ctrl + C to stop.\n");
-    getchar();
+    //printf("Playing. Ctrl + C to stop.\n");
+    //getchar();
 
     err = Pa_StopStream(stream);
     if (err != paNoError) goto error;
@@ -826,29 +914,13 @@ void print_params(MultiSynthData *data) {
 
 
 
+
+
 int main() { 
     // --------------------------- play stream, no fft filters yet ------------------------------
     play_sound_stream();
 
     // figure out how to get ncurses working with portaudio callback still going
-
-    initscr();
-    noecho();
-    cbreak();
-    timeout(100);
-
-    int ch;
-    while ((ch = getch()) != 'q') {
-        clear();
-        printw("Use keys to adjust parameters:\n");
-        printw("Frequency: [a] Increase  [z] Decrease\n");
-        printw("Amplitude: [s] Increase  [x] Decrease\n");
-        printw("Phase:     [d] Increase  [c] Decrease\n");
-        printw("Press 'q' to quit.\n");
-
-    }
-
-    endwin();
     
     return 0;
     
