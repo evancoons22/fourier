@@ -772,32 +772,42 @@ void print_synth_info(SynthData *data) {
     fprintf(log_file, "\tlfo_envelope_sustain: %.2f\n", data->params.lfo_envelope_sustain);
 }
 
+
 void add_default_sound(MultiSynthData *multi_synth_data, float frequency) {
+    if (multi_synth_data->num_sounds >= MAX_SOUNDS) {
+        // Handle case when the max number of sounds is reached
+        return;
+    }
+
     SynthData new_synth = {
-        {
-            // C
-            frequency,  // frequency
-            1.0,    // amplitude
-            0,      // waveform_type
-            1000.0, // filter_cutoff
-            0.2,    // lfo_frequency
-            1.0,   // lfo_depth
-            0.1,    // lfo_freq_mod_rate
-            0.5,    // lfo_freq_mod_depth
-            0.1,    // lfo_envelope_attack
-            0.2,    // lfo_envelope_decay
-            0.7,    // lfo_envelope_sustain
-            0.3     // lfo_envelope_release
-        },
-        0.0,  // phase
-        0.0,  // lfo_phase
-        0.0,  // lfo_envelope_value
-        0.0   // start_time
+        frequency,  // frequency
+        1.0,        // amplitude
+        0,          // waveform_type
+        1000.0,     // filter_cutoff
+        0.2,        // lfo_frequency
+        1.0,        // lfo_depth
+        0.1,        // lfo_freq_mod_rate
+        0.5,        // lfo_freq_mod_depth
+        0.1,        // lfo_envelope_attack
+        0.2,        // lfo_envelope_decay
+        0.7,        // lfo_envelope_sustain
+        0.3,        // lfo_envelope_release
+        0.0,        // phase
+        0.0,        // lfo_phase
+        0.0,        // lfo_envelope_value
+        0.0         // start_time
     };
+
+    // Initialize the buffer for this synth data
     initialize_buffer(&new_synth);
-    add_synth(multi_synth_data, &new_synth);
-    // multi_synth_data->sounds[multi_synth_data->num_sounds] = new_synth;
-    // multi_synth_data->num_sounds++;
+
+    // this is the same as add synth but w/o all the print
+    multi_synth_data->sounds[multi_synth_data->num_sounds] = new_synth;
+    multi_synth_data->num_sounds++;
+
+    fprintf(log_file, "Adding synth of frequency: %.2f\n", frequency);
+    fprintf(log_file, "number of sounds in add_default_sound: %d\n", multi_synth_data->num_sounds);
+    fflush(log_file);
 }
 
 
@@ -919,7 +929,7 @@ void play_sound_stream() {
     // print number of sounds
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
-    add_synth(&multi_data, &data);
+    // add_synth(&multi_data, &data);
     //add_synth(&multi_data, &data2);
     //add_synth(&multi_data, &data3);
 
