@@ -1,0 +1,7 @@
+Initializing program... num_sounds: 0
+Adding a sound with frequency: 440.81, in mutex
+number of sounds in add_synth: 1
+unlocking mutex
+Initializing buffer ... num_sounds: 1
+Adding a sound with frequency: 494.00, in mutex
+number of sounds in add_synth: 2

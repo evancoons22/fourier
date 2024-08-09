@@ -10,7 +10,7 @@
 #include <ncurses.h>
 #include <unistd.h>
 
-
+FILE *log_file;
 
 
 #define SAMPLE_RATE 44100
@@ -667,6 +667,8 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
 
 
 void initialize_buffer(SynthData *data) {
+    mvprintw(10, 0, "Initializing buffer with frequency: %.2f", data->params.frequency); // Debug print
+    refresh();
     data->buffer_index = 0;
     data->samples_generated = BUFFER_SIZE;
     data->current_buffer = data->buffer1;
@@ -674,12 +676,11 @@ void initialize_buffer(SynthData *data) {
     pthread_mutex_init(&data->buffer_mutex, NULL);
     pthread_cond_init(&data->buffer_cond, NULL);
     data->buffer_ready = 0;
-    // data->params.frequency = frequency;  
     fill_buffer(data, 0.0);
 }
 
 void initialize_multi_buffer(MultiSynthData *data) {
-    data->num_sounds = MAX_SOUNDS;
+    // data->num_sounds = 0;
     for (int i = 0; i < data->num_sounds; i++) {
         initialize_buffer(&data->sounds[i]);
     }
@@ -692,8 +693,19 @@ void add_synth(MultiSynthData *multi_data, SynthData *synth_data) {
         // don't even need memcpy
         //memcpy(&multi_data->sounds[multi_data->num_sounds], synth_data, sizeof(SynthData));
         multi_data->num_sounds++;
-    }
+        mvprintw(11, 0, "Added sound with frequency: %.2f", synth_data->params.frequency); 
+        refresh();  
+        fprintf(log_file, "Adding a sound with frequency: %.2f, in mutex\n", synth_data->params.frequency);
+        fprintf(log_file, "number of sounds in add_synth: %d\n", multi_data->num_sounds);
+        fflush(log_file);
+
+    } else { 
+        mvprintw(12, 0, "Max sounds reached. Cannot add more."); // Debug print
+        refresh();                                                                 
+    } 
+
     pthread_mutex_unlock(&multi_data->mutex);
+    fprintf(log_file, "unlocking mutex\n");
 }
 
 // this is a bad way to do this right now
@@ -723,6 +735,72 @@ void fill_multi_buffer(MultiSynthData *data, double current_time) {
     }
 }
 
+SynthData default_synth = {
+    {
+        // C
+        120.81,  // frequency
+        1.0,    // amplitude
+        0,      // waveform_type
+        1000.0, // filter_cutoff
+        0.2,    // lfo_frequency
+        1.0,   // lfo_depth
+        0.1,    // lfo_freq_mod_rate
+        0.5,    // lfo_freq_mod_depth
+        0.1,    // lfo_envelope_attack
+        0.2,    // lfo_envelope_decay
+        0.7,    // lfo_envelope_sustain
+        0.3     // lfo_envelope_release
+    },
+    0.0,  // phase
+    0.0,  // lfo_phase
+    0.0,  // lfo_envelope_value
+    0.0   // start_time
+};
+
+void print_synth_info(SynthData *data) {
+    fprintf(log_file, "Here is how bad your new synth is:\n");
+    fprintf(log_file, "\tfrequency: %.2f\n", data->params.frequency);
+    fprintf(log_file, "\tamplitude: %.2f\n", data->params.amplitude);
+    fprintf(log_file, "\twaveform_type: %d\n", data->params.waveform_type);
+    fprintf(log_file, "\tfilter_cutoff: %.2f\n", data->params.filter_cutoff);
+    fprintf(log_file, "\tlfo_frequency: %.2f\n", data->params.lfo_frequency);
+    fprintf(log_file, "\tlfo_depth: %.2f\n", data->params.lfo_depth);
+    fprintf(log_file, "\tlfo_freq_mod_rate: %.2f\n", data->params.lfo_freq_mod_rate);
+    fprintf(log_file, "\tlfo_freq_mod_depth: %.2f\n", data->params.lfo_freq_mod_depth);
+    fprintf(log_file, "\tlfo_envelope_attack: %.2f\n", data->params.lfo_envelope_attack);
+    fprintf(log_file, "\tlfo_envelope_decay: %.2f\n", data->params.lfo_envelope_decay);
+    fprintf(log_file, "\tlfo_envelope_sustain: %.2f\n", data->params.lfo_envelope_sustain);
+}
+
+void add_default_sound(MultiSynthData *multi_synth_data, float frequency) {
+    SynthData new_synth = {
+        {
+            // C
+            frequency,  // frequency
+            1.0,    // amplitude
+            0,      // waveform_type
+            1000.0, // filter_cutoff
+            0.2,    // lfo_frequency
+            1.0,   // lfo_depth
+            0.1,    // lfo_freq_mod_rate
+            0.5,    // lfo_freq_mod_depth
+            0.1,    // lfo_envelope_attack
+            0.2,    // lfo_envelope_decay
+            0.7,    // lfo_envelope_sustain
+            0.3     // lfo_envelope_release
+        },
+        0.0,  // phase
+        0.0,  // lfo_phase
+        0.0,  // lfo_envelope_value
+        0.0   // start_time
+    };
+    initialize_buffer(&new_synth);
+    add_synth(multi_synth_data, &new_synth);
+    // multi_synth_data->sounds[multi_synth_data->num_sounds] = new_synth;
+    // multi_synth_data->num_sounds++;
+}
+
+
 void* ncurses_thread(void *arg) {
     MultiSynthData *multi_data = (MultiSynthData*)arg;
     initscr();
@@ -730,38 +808,32 @@ void* ncurses_thread(void *arg) {
     cbreak();
     timeout(100); // Non-blocking input with a timeout
 
+    int line = 5;
     while (1) {
         int ch = getch();
         if (ch == 'q') {
             break;
         }
-        SynthData new_synth;
+        // SynthData new_synth;
         switch (ch) {
             case 'a':
-                new_synth.params.frequency = 440.0f;
-                initialize_buffer(&new_synth);  // A4
-                add_synth(multi_data, &new_synth);
+                add_default_sound(multi_data, 440.0);
                 mvprintw(0, 0, "A pressed: 440Hz");
                 break;
             case 's':
-                new_synth.params.frequency = 494.0f;
-                initialize_buffer(&new_synth);  // B4
-                add_synth(multi_data, &new_synth);
+                add_default_sound(multi_data, 494.0);
                 mvprintw(1, 0, "S pressed: 494Hz");
                 break;
             case 'd':
-                new_synth.params.frequency = 523.0f;
-                initialize_buffer(&new_synth);  // C5
-                add_synth(multi_data, &new_synth);
+                add_default_sound(multi_data, 523.0);
                 mvprintw(2, 0, "D pressed: 523Hz");
                 break;
             case 'f':
-                new_synth.params.frequency = 587.0f;
-                initialize_buffer(&new_synth);  // D5
-                add_synth(multi_data, &new_synth);
+                add_default_sound(multi_data, 587.0);
                 mvprintw(3, 0, "F pressed: 587Hz");
                 break;
         }
+        mvprintw(line++, 0, "Key %c pressed, num_sounds: %d", ch, multi_data->num_sounds);
         refresh();
     }
 
@@ -777,7 +849,7 @@ void play_sound_stream() {
     SynthData data = {
         {
             // C
-            130.81,  // frequency
+            440.81,  // frequency
             1.0,    // amplitude
             0,      // waveform_type
             1000.0, // filter_cutoff
@@ -844,6 +916,9 @@ void play_sound_stream() {
 
     MultiSynthData multi_data;
     initialize_multi_syth_data(&multi_data);
+    // print number of sounds
+    fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
+    fflush(log_file);
     add_synth(&multi_data, &data);
     //add_synth(&multi_data, &data2);
     //add_synth(&multi_data, &data3);
@@ -857,6 +932,8 @@ void play_sound_stream() {
 
     err = Pa_Initialize();
     initialize_multi_buffer(&multi_data);
+    fprintf(log_file, "Initializing buffer ... num_sounds: %d\n", multi_data.num_sounds);
+    fflush(log_file);
     if (err != paNoError) goto error;
 
     pthread_t thread;
@@ -887,6 +964,7 @@ void play_sound_stream() {
     if (err != paNoError) goto error;
     
     pthread_join(ui_thread, NULL);
+    fclose(log_file);
 
     //printf("Playing. Ctrl + C to stop.\n");
     //getchar();
@@ -918,6 +996,13 @@ void print_params(MultiSynthData *data) {
 
 int main() { 
     // --------------------------- play stream, no fft filters yet ------------------------------
+    
+    log_file = fopen("debug.log", "w");
+    if (!log_file) {
+        fprintf(stderr, "Failed to open log file\n");
+        return 1;
+    }
+
     play_sound_stream();
 
     // figure out how to get ncurses working with portaudio callback still going
