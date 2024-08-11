@@ -10,10 +10,10 @@ CFLAGS = -Wall -O3
 LIBS = -lm -lportaudio -lncurses
 
 # Source file
-SRC = fft.c
+SRC = synth.c
 
 # Output executable
-TARGET = fft
+TARGET = synth
 
 # Build rule
 all: $(TARGET)
