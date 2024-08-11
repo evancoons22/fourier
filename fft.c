@@ -562,39 +562,22 @@ double generate_sample(SynthData *data, double current_time) {
 }
 
 
-void fill_buffer(SynthData *data, double current_time) {
+void fill_buffer(SynthData *sound, double current_time) {
     for (unsigned long i = 0; i < BUFFER_SIZE; i++) {
-        data->next_buffer[i] = generate_sample(data, current_time + i / (double)SAMPLE_RATE);
+        sound->next_buffer[i] = generate_sample(sound, current_time + i / (double)SAMPLE_RATE);
     }
-    pthread_mutex_lock(&data->buffer_mutex);
-    data->buffer_ready = 1;
-    pthread_cond_signal(&data->buffer_cond);
-    pthread_mutex_unlock(&data->buffer_mutex);
+    pthread_mutex_lock(&sound->buffer_mutex);
+    sound->buffer_ready = 1;
+    pthread_cond_signal(&sound->buffer_cond);
+    pthread_mutex_unlock(&sound->buffer_mutex);
 }
 
 
-//void* generate_thread(void *arg) {
-//    SynthData *data = (SynthData*)arg;
-//    double current_time = 0.0;
-//
-//    while (1) {
-//        pthread_mutex_lock(&data->buffer_mutex);
-//        while (data->buffer_ready) {
-//            pthread_cond_wait(&data->buffer_cond, &data->buffer_mutex);
-//        }
-//        pthread_mutex_unlock(&data->buffer_mutex);
-//
-//        // have to keep this. It gets buffer ready
-//        fill_buffer(data, current_time);
-//        current_time += (double)BUFFER_SIZE / SAMPLE_RATE;
-//    }
-//
-//    return NULL;
-//}
+double current_time;
 
 void* generate_thread(void *arg) {
     MultiSynthData *data = (MultiSynthData*)arg;
-    double current_time = 0.0;
+    current_time = 0.0;
 
     while (1) {
         for (int i = 0; i < data->num_sounds; i++) {
@@ -633,10 +616,9 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
         // cycle through each sound to generate a sample and send to the output
         for (int j = 0; j < data->num_sounds; j++) {
             SynthData *sound = &data->sounds[j];
-            pthread_mutex_unlock(&sound->buffer_mutex);
+            pthread_mutex_lock(&sound->buffer_mutex);
             if (sound->samples_generated == 0) {
                 // Switch buffers if current buffer is exhausted
-                // pthread_mutex_lock(&sound->buffer_mutex);
                 float *temp = sound->current_buffer;
                 sound->current_buffer = sound->next_buffer;
                 sound->next_buffer = temp;
@@ -660,6 +642,7 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
         *out++ = sample;  // Left channel
         *out++ = sample;  // Right channel
     }
+
 
     return paContinue;
 }
@@ -687,12 +670,17 @@ void initialize_multi_buffer(MultiSynthData *data) {
 }
 
 void add_synth(MultiSynthData *multi_data, SynthData *synth_data) {
+    // initialize buffer
+    initialize_buffer(synth_data);
+
     pthread_mutex_lock(&multi_data->mutex);
     if (multi_data->num_sounds < MAX_SOUNDS) {
         multi_data->sounds[multi_data->num_sounds] = *synth_data;
+        multi_data->num_sounds++;
+
         // don't even need memcpy
         //memcpy(&multi_data->sounds[multi_data->num_sounds], synth_data, sizeof(SynthData));
-        multi_data->num_sounds++;
+        // initialize buffer
         mvprintw(11, 0, "Added sound with frequency: %.2f", synth_data->params.frequency); 
         refresh();  
         fprintf(log_file, "Adding a sound with frequency: %.2f, in mutex\n", synth_data->params.frequency);
@@ -773,30 +761,35 @@ void print_synth_info(SynthData *data) {
 }
 
 
+SynthData new_synth = {
+    {
+        120,  // frequency
+        1.0,    // amplitude
+        0,      // waveform_type
+        1000.0, // filter_cutoff
+        0.5,    // lfo_frequency
+        0.5,   // lfo_depth
+        0.1,    // lfo_freq_mod_rate
+        0.5,    // lfo_freq_mod_depth
+        0.1,    // lfo_envelope_attack
+        0.2,    // lfo_envelope_decay
+        0.7,    // lfo_envelope_sustain
+        0.3     // lfo_envelope_release
+    },
+    0.0,  // phase
+    0.0,  // lfo_phase
+    0.0,  // lfo_envelope_value
+    0.0   // start_time
+};
+
 void add_default_sound(MultiSynthData *multi_synth_data, float frequency) {
     if (multi_synth_data->num_sounds >= MAX_SOUNDS) {
         // Handle case when the max number of sounds is reached
         return;
     }
 
-    SynthData new_synth = {
-        frequency,  // frequency
-        1.0,        // amplitude
-        0,          // waveform_type
-        1000.0,     // filter_cutoff
-        0.2,        // lfo_frequency
-        1.0,        // lfo_depth
-        0.1,        // lfo_freq_mod_rate
-        0.5,        // lfo_freq_mod_depth
-        0.1,        // lfo_envelope_attack
-        0.2,        // lfo_envelope_decay
-        0.7,        // lfo_envelope_sustain
-        0.3,        // lfo_envelope_release
-        0.0,        // phase
-        0.0,        // lfo_phase
-        0.0,        // lfo_envelope_value
-        0.0         // start_time
-    };
+    // we need to initialize start time correctly
+    // new_synth.start_time = current_time;
 
     // Initialize the buffer for this synth data
     initialize_buffer(&new_synth);
@@ -827,7 +820,8 @@ void* ncurses_thread(void *arg) {
         // SynthData new_synth;
         switch (ch) {
             case 'a':
-                add_default_sound(multi_data, 440.0);
+                // add_default_sound(multi_data, 440.0);
+                add_synth(multi_data, &new_synth);
                 mvprintw(0, 0, "A pressed: 440Hz");
                 break;
             case 's':
@@ -930,8 +924,8 @@ void play_sound_stream() {
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
     // add_synth(&multi_data, &data);
-    //add_synth(&multi_data, &data2);
-    //add_synth(&multi_data, &data3);
+    // add_synth(&multi_data, &data2);
+    // add_synth(&multi_data, &data3);
 
     //multi_data.sounds[0] = data;
     //multi_data.sounds[1] = data2;

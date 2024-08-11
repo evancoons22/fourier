@@ -1,10 +1,7 @@
 Initializing program... num_sounds: 0
 Initializing buffer ... num_sounds: 0
-Adding synth of frequency: 440.00
-number of sounds in add_default_sound: 1
-Adding synth of frequency: 523.00
-number of sounds in add_default_sound: 2
+Adding a sound with frequency: 120.00, in mutex
+number of sounds in add_synth: 1
+unlocking mutex
 Adding synth of frequency: 494.00
-number of sounds in add_default_sound: 3
-Adding synth of frequency: 587.00
-number of sounds in add_default_sound: 4
+number of sounds in add_default_sound: 2
