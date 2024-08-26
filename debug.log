@@ -1,3 +1,9 @@
-Initializing program... num_sounds: 0
-Initializing buffer ... num_sounds: 0
-max_x: 239, max_y: 56
+Added sound with frequency: 150.00
+Initializing program... num_sounds: 1
+Initializing buffer ... num_sounds: 1
+max_x: 240, max_y: 59
+Added sound with frequency: 164.00
+Added sound with frequency: 164.00
+Added sound with frequency: 196.00
+Max sounds reached. Cannot add more.
+Max sounds reached. Cannot add more.
