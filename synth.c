@@ -259,10 +259,8 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
 
 void add_synth(MultiSynthData *multi_data, double frequency) {
     if (multi_data->num_sounds >= MAX_SOUNDS) {
-        mvprintw(12, 0, "Max sounds reached. Cannot add more.");
         fprintf(log_file, "Max sounds reached. Cannot add more.\n");
         fflush(log_file);
-        refresh();
         return;
     }
 
@@ -306,8 +304,6 @@ void add_synth(MultiSynthData *multi_data, double frequency) {
     multi_data->num_sounds++;
     pthread_mutex_unlock(&multi_data->mutex);
 
-    mvprintw(11, 0, "Added sound with frequency: %.2f", frequency);
-    // refresh();
 
     fprintf(log_file, "Added sound with frequency: %.2f\n", frequency);
     fflush(log_file);
