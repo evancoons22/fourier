@@ -367,8 +367,8 @@ void draw_piano3(struct tb_event *ev, int highlighted_key) {
     int black_key_positions[] = {1, 2, 4, 5, 6};
     for (int i = 0; i < 5; i++) {
         int x = startx + black_key_positions[i] * key_width - (i < 2 ? 2 : 3);
-        uint16_t fg = (black_keys[i] - 'A' + 7 == highlighted_key) ? TB_WHITE : TB_BLACK;
-        uint16_t bg = (black_keys[i] - 'A' + 7 == highlighted_key) ? TB_BLACK : TB_DEFAULT;
+        uint16_t fg = (i + 7 == highlighted_key) ? TB_WHITE : TB_BLACK;
+        uint16_t bg = (i + 7 == highlighted_key) ? TB_BLACK : TB_DEFAULT;
         tb_set_cell(x, starty, black_keys[i], fg, bg);
         tb_set_cell(x, starty + 1, ' ', TB_DEFAULT, TB_BLACK);
     }
