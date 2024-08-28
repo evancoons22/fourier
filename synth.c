@@ -71,8 +71,9 @@ typedef struct {
     double phase;
     double lfo_phase;
     double lfo_envelope_value;
-    // atomic_double_t start_time;
     double start_time;
+    double release_start_time;
+    int is_active;
 } SynthData;
 
 typedef struct {
@@ -170,20 +171,30 @@ double apply_envelope(SynthData *data, double current_time) {
     double attack = data->params.lfo_envelope_attack;
     double decay = data->params.lfo_envelope_decay;
     double sustain = data->params.lfo_envelope_sustain;
-    // double release = data->params.lfo_envelope_release;
-    //
+    double release = data->params.lfo_envelope_release;
+
     if (elapsed < 0) {
         elapsed = 0; // Ensure elapsed time is not negative
     }
 
-    if (elapsed < attack) {
-        return elapsed / attack;
-    } else if (elapsed < attack + decay) {
-        return 1.0 - ((elapsed - attack) / decay) * (1.0 - sustain);
+    if (data->is_active) {
+        if (elapsed < attack) {
+            return elapsed / attack;
+        } else if (elapsed < attack + decay) {
+            return 1.0 - ((elapsed - attack) / decay) * (1.0 - sustain);
+        } else {
+            return sustain;
+        }
     } else {
-        return sustain;
+        fprintf(log_file, "release was hit, no longer active");
+        fflush(log_file);
+        double release_elapsed = current_time - data->release_start_time;
+        if (release_elapsed < release) {
+            return sustain * (1.0 - release_elapsed / release);
+        } else {
+            return 0.0;
+        }
     }
-    // Note: Release is not implemented here as it requires note-off information
 }
 
 // clock_t start_time;
@@ -271,27 +282,25 @@ void add_synth(MultiSynthData *multi_data, double frequency) {
     // Initialize SynthData fields
     new_sound->params = (SynthParams){
         frequency, // frequency
-            1.0,       // amplitude
-            0,         // waveform_type
-            1000.0,    // filter_cutoff
-            0.5,       // lfo_frequency
-            0.5,       // lfo_depth
-            0.1,       // lfo_freq_mod_rate
-            0.5,       // lfo_freq_mod_depth
-            0.1,       // lfo_envelope_attack
-            0.2,       // lfo_envelope_decay
-            0.7,       // lfo_envelope_sustain
-            0.3        // lfo_envelope_release
+        1.0,       // amplitude
+        0,         // waveform_type
+        1000.0,    // filter_cutoff
+        0.5,       // lfo_frequency
+        0.5,       // lfo_depth
+        0.1,       // lfo_freq_mod_rate
+        0.5,       // lfo_freq_mod_depth
+        0.1,       // lfo_envelope_attack
+        0.2,       // lfo_envelope_decay
+        0.7,       // lfo_envelope_sustain
+        0.3        // lfo_envelope_release
     };
     new_sound->phase = 0.0;
     new_sound->lfo_phase = 0.0;
     new_sound->lfo_envelope_value = 0.0;
-
-    // double current_time = atomic_load_double(&multi_data->current_time);
-    // atomic_store_double(&new_sound->start_time, current_time);
+    new_sound->is_active = 1;
     double current_time = multi_data->current_time;
     new_sound->start_time = current_time;
-    // memcpy(new_sound->start_time, multi_data->current_time, sizeof(current_time));
+    new_sound->release_start_time = 0.0;
 
     initialize_buffer_manager(&new_sound->buffer_manager);
 
@@ -384,16 +393,16 @@ void draw_piano3(struct tb_event *ev, int highlighted_key) {
         }
     }
     tb_print(info_startx + 2, info_starty, TB_WHITE, TB_DEFAULT, " Key Press Info ");
-
     // Present the changes to the screen
     tb_present();
-}
+} 
 
 void *termbox_thread(void *arg) {
     MultiSynthData *multi_data = (MultiSynthData *)arg;
     struct tb_event ev;
     int highlighted_key = -1;
     char info_text[40] = "";
+    int active_keys[12] = {0}; // Track active keys
 
     if (tb_init() != 0) {
         fprintf(stderr, "tb_init() failed\n");
@@ -412,79 +421,77 @@ void *termbox_thread(void *arg) {
             }
 
             highlighted_key = -1;
-            switch (ev.ch) {
-                case 's':
-                    add_synth(multi_data, 261.6);
-                    snprintf(info_text, sizeof(info_text), "S pressed: 261.6Hz (C4)");
-                    highlighted_key = 0;
-                    break;
-                case 'd':
-                    add_synth(multi_data, 293.7);
-                    snprintf(info_text, sizeof(info_text), "D pressed: 293.7Hz (D4)");
-                    highlighted_key = 1;
-                    break;
-                case 'f':
-                    add_synth(multi_data, 329.6);
-                    snprintf(info_text, sizeof(info_text), "F pressed: 329.6Hz (E4)");
-                    highlighted_key = 2;
-                    break;
-                case 'g':
-                    add_synth(multi_data, 349.2);
-                    snprintf(info_text, sizeof(info_text), "G pressed: 349.2Hz (F4)");
-                    highlighted_key = 3;
-                    break;
-                case 'h':
-                    add_synth(multi_data, 392.0);
-                    snprintf(info_text, sizeof(info_text), "H pressed: 392.0Hz (G4)");
-                    highlighted_key = 4;
-                    break;
-                case 'j':
-                    add_synth(multi_data, 440.0);
-                    snprintf(info_text, sizeof(info_text), "J pressed: 440.0Hz (A4)");
-                    highlighted_key = 5;
-                    break;
-                case 'k':
-                    add_synth(multi_data, 493.9);
-                    snprintf(info_text, sizeof(info_text), "K pressed: 493.9Hz (B4)");
-                    highlighted_key = 6;
-                    break;
-                case 'e':
-                    add_synth(multi_data, 277.2);
-                    snprintf(info_text, sizeof(info_text), "E pressed: 277.2Hz (C#4/Db4)");
-                    highlighted_key = 7;
-                    break;
-                case 'r':
-                    add_synth(multi_data, 311.1);
-                    snprintf(info_text, sizeof(info_text), "R pressed: 311.1Hz (D#4/Eb4)");
-                    highlighted_key = 8;
-                    break;
-                case 'y':
-                    add_synth(multi_data, 370.0);
-                    snprintf(info_text, sizeof(info_text), "Y pressed: 370.0Hz (F#4/Gb4)");
-                    highlighted_key = 9;
-                    break;
-                case 'u':
-                    add_synth(multi_data, 415.3);
-                    snprintf(info_text, sizeof(info_text), "U pressed: 415.3Hz (G#4/Ab4)");
-                    highlighted_key = 10;
-                    break;
-                case 'i':
-                    add_synth(multi_data, 466.2);
-                    snprintf(info_text, sizeof(info_text), "I pressed: 466.2Hz (A#4/Bb4)");
-                    highlighted_key = 11;
-                    break;
+            int key_index = -1;
+            double frequency = 0.0;
 
+            switch (ev.ch) {
+                case 's': key_index = 0; frequency = 261.6; break;
+                case 'd': key_index = 1; frequency = 293.7; break;
+                case 'f': key_index = 2; frequency = 329.6; break;
+                case 'g': key_index = 3; frequency = 349.2; break;
+                case 'h': key_index = 4; frequency = 392.0; break;
+                case 'j': key_index = 5; frequency = 440.0; break;
+                case 'k': key_index = 6; frequency = 493.9; break;
+                case 'e': key_index = 7; frequency = 277.2; break;
+                case 'r': key_index = 8; frequency = 311.1; break;
+                case 'y': key_index = 9; frequency = 370.0; break;
+                case 'u': key_index = 10; frequency = 415.3; break;
+                case 'i': key_index = 11; frequency = 466.2; break;
             }
 
-            draw_piano3(&ev, highlighted_key);
-            tb_print(3, 18, TB_WHITE, TB_DEFAULT, info_text);
-            tb_present();
+            if (key_index != -1) {
+                if (ev.type == TB_EVENT_KEY && ev.key == 0) {
+                    // Key press
+                    if (!active_keys[key_index]) {
+                        add_synth(multi_data, frequency);
+                        active_keys[key_index] = 1;
+                        highlighted_key = key_index;
+                        // snprintf(info_text, sizeof(info_text), "%c pressed: %.1fHz", ev.ch, frequency);
+                        fprintf(log_file, "%c pressed: %.1fHz\n", ev.ch, frequency);
+                    } else if (ev.type == TB_EVENT_KEY && (ev.key == TB_KEY_SPACE || ev.ch == ' ')) {
+                        // Key release (simulated with spacebar for this example)
+                        for (int i = 0; i < 12; i++) {
+                            if (active_keys[i]) {
+                                double release_freq = 0.0;
+                                switch (i) {
+                                    case 0: release_freq = 261.6; break;
+                                    case 1: release_freq = 293.7; break;
+                                    case 2: release_freq = 329.6; break;
+                                    case 3: release_freq = 349.2; break;
+                                    case 4: release_freq = 392.0; break;
+                                    case 5: release_freq = 440.0; break;
+                                    case 6: release_freq = 493.9; break;
+                                    case 7: release_freq = 277.2; break;
+                                    case 8: release_freq = 311.1; break;
+                                    case 9: release_freq = 370.0; break;
+                                    case 10: release_freq = 415.3; break;
+                                    case 11: release_freq = 466.2; break;
+                                }
+                                for (int j = 0; j < multi_data->num_sounds; j++) {
+                                    if (multi_data->sounds[j].params.frequency == release_freq) {
+                                        multi_data->sounds[j].is_active = 0;
+                                        multi_data->sounds[j].release_start_time = multi_data->current_time;
+                                        break;
+                                    }
+                                }
+                                active_keys[i] = 0;
+                                fprintf(log_file, "Key %d released: %.1fHz\n", i, release_freq);
+                                fflush(log_file);
+                            }
+                        }
+                    }
+                }
+            }
         }
-    }
 
+        draw_piano3(&ev, highlighted_key);
+        tb_print(3, 18, TB_WHITE, TB_DEFAULT, info_text);
+        tb_present();
+    }
     tb_shutdown();
     return NULL;
 }
+
 
 
 
@@ -502,8 +509,7 @@ void play_sound_stream() {
     // add_synth(&multi_data, 193.0);
     add_synth(&multi_data, 150.0);
 
-    fprintf(log_file, "Initializing program... num_sounds: %d\n",
-            multi_data.num_sounds);
+    fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
 
     err = Pa_Initialize();
