@@ -1,18 +1,9 @@
-Initializing program... num_sounds: 0
-Initializing buffer ... num_sounds: 0
+Added sound with frequency: 150.00
+Initializing program... num_sounds: 1
+Initializing buffer ... num_sounds: 1
 Added sound with frequency: 261.60
 s pressed: 261.6Hz
 Added sound with frequency: 293.70
 d pressed: 293.7Hz
 Added sound with frequency: 329.60
 f pressed: 329.6Hz
-Added sound with frequency: 349.20
-g pressed: 349.2Hz
-Added sound with frequency: 392.00
-h pressed: 392.0Hz
-Pressed space to release all keys
-Key 0 released: 261.6Hz
-Key 1 released: 293.7Hz
-Key 2 released: 329.6Hz
-Key 3 released: 349.2Hz
-Key 4 released: 392.0Hz

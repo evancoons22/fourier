@@ -186,10 +186,14 @@ double apply_envelope(SynthData *data, double current_time) {
             return sustain;
         }
     } else {
+        fprintf(log_file, "Note is not active\n");
+        fflush(log_file);
         double release_elapsed = current_time - data->release_start_time;
         if (release_elapsed < release) {
             return sustain * (1.0 - release_elapsed / release);
         } else {
+            fprintf(log_file, "Note completely off\n");
+            fflush(log_file);
             return 0.0;
         }
     }
@@ -341,10 +345,10 @@ void initialize_multi_syth_data(MultiSynthData *data) {
 }
 
 void draw_piano3(struct tb_event *ev, int highlighted_key) {
-    int startx = 2;
-    int starty = 2;
-    int key_width = 4;
-    int key_height = 3;
+    int startx = 4;  // Moved right
+    int starty = 4;  // Moved down
+    int key_width = 8;  // Doubled
+    int key_height = 6;  // Doubled
     int white_keys = 7;
 
     // Clear the screen
@@ -366,6 +370,11 @@ void draw_piano3(struct tb_event *ev, int highlighted_key) {
         int x = startx + i * key_width;
         uint16_t fg = (i == highlighted_key) ? TB_BLACK : TB_WHITE;
         uint16_t bg = (i == highlighted_key) ? TB_WHITE : TB_DEFAULT;
+        for (int y = starty; y < starty + key_height; y++) {
+            for (int dx = 0; dx < key_width - 1; dx++) {
+                tb_set_cell(x + dx, y, ' ', TB_DEFAULT, bg);
+            }
+        }
         tb_set_cell(x + 1, starty + key_height, white_keys_letters[i], fg, bg);
     }
 
@@ -373,27 +382,29 @@ void draw_piano3(struct tb_event *ev, int highlighted_key) {
     const char *black_keys = "ERYUI";
     int black_key_positions[] = {1, 2, 4, 5, 6};
     for (int i = 0; i < 5; i++) {
-        int x = startx + black_key_positions[i] * key_width - (i < 2 ? 2 : 3);
+        int x = startx + black_key_positions[i] * key_width - (i < 2 ? 4 : 6);
         uint16_t fg = (i + 7 == highlighted_key) ? TB_WHITE : TB_BLACK;
         uint16_t bg = (i + 7 == highlighted_key) ? TB_BLACK : TB_DEFAULT;
         tb_set_cell(x, starty, black_keys[i], fg, bg);
         tb_set_cell(x, starty + 1, ' ', TB_DEFAULT, TB_BLACK);
+        tb_set_cell(x, starty + 2, ' ', TB_DEFAULT, TB_BLACK);
     }
 
     // Draw the keypress info box
-    int info_startx = 1;
-    int info_starty = starty + key_height + 3;
+    int info_startx = 2;
+    int info_starty = starty + key_height + 4;
     for (int y = info_starty; y < info_starty + 3; y++) {
-        for (int x = info_startx; x < info_startx + 40; x++) {
-            if (y == info_starty || y == info_starty + 2 || x == info_startx || x == info_startx + 39) {
+        for (int x = info_startx; x < info_startx + 60; x++) {
+            if (y == info_starty || y == info_starty + 2 || x == info_startx || x == info_startx + 59) {
                 tb_set_cell(x, y, (y == info_starty || y == info_starty + 2) ? '-' : '|', TB_WHITE, TB_DEFAULT);
             }
         }
     }
-    tb_print(info_startx + 2, info_starty, TB_WHITE, TB_DEFAULT, " Key Press Info ");
+    tb_print(info_startx + 2, info_starty + 1, TB_WHITE, TB_DEFAULT, " Key Press Info | ");
     // Present the changes to the screen
     tb_present();
-} 
+}
+
 
 void *termbox_thread(void *arg) {
     MultiSynthData *multi_data = (MultiSynthData *)arg;
@@ -490,7 +501,7 @@ void *termbox_thread(void *arg) {
         }
 
         draw_piano3(&ev, highlighted_key);
-        tb_print(3, 18, TB_WHITE, TB_DEFAULT, info_text);
+        tb_print(24, 15, TB_WHITE, TB_DEFAULT, info_text);
         tb_present();
     }
     tb_shutdown();
@@ -512,7 +523,9 @@ void play_sound_stream() {
 
     // add_synth(&multi_data, 200.0);
     // add_synth(&multi_data, 193.0);
-    // add_synth(&multi_data, 150.0);
+    add_synth(&multi_data, 150.0);
+    // set this synths amplitude to 0
+    multi_data.sounds[0].params.amplitude = 0.0;
 
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
