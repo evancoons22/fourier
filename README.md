@@ -1,4 +1,3 @@
-
 ## fast fourier transform
 - initial project  -- audio filters with fast fourier transforms (in fft.c) 
 - this has turned into a digital synth project to generate waveforms first

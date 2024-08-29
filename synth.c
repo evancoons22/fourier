@@ -20,7 +20,7 @@ FILE *log_file;
 #define FRAMES_PER_BUFFER 256
 #define BUFFER_SIZE 8192 // Adjust this value as needed
 #define PI 3.14159265358979323846
-#define MAX_SOUNDS 4
+#define MAX_SOUNDS 12
 #define NUM_BUFFERS 3
 
 
@@ -186,8 +186,6 @@ double apply_envelope(SynthData *data, double current_time) {
             return sustain;
         }
     } else {
-        fprintf(log_file, "release was hit, no longer active");
-        fflush(log_file);
         double release_elapsed = current_time - data->release_start_time;
         if (release_elapsed < release) {
             return sustain * (1.0 - release_elapsed / release);
@@ -446,41 +444,48 @@ void *termbox_thread(void *arg) {
                         add_synth(multi_data, frequency);
                         active_keys[key_index] = 1;
                         highlighted_key = key_index;
-                        // snprintf(info_text, sizeof(info_text), "%c pressed: %.1fHz", ev.ch, frequency);
+                        snprintf(info_text, sizeof(info_text), "%c pressed: %.1fHz", ev.ch, frequency);
                         fprintf(log_file, "%c pressed: %.1fHz\n", ev.ch, frequency);
-                    } else if (ev.type == TB_EVENT_KEY && (ev.key == TB_KEY_SPACE || ev.ch == ' ')) {
-                        // Key release (simulated with spacebar for this example)
-                        for (int i = 0; i < 12; i++) {
-                            if (active_keys[i]) {
-                                double release_freq = 0.0;
-                                switch (i) {
-                                    case 0: release_freq = 261.6; break;
-                                    case 1: release_freq = 293.7; break;
-                                    case 2: release_freq = 329.6; break;
-                                    case 3: release_freq = 349.2; break;
-                                    case 4: release_freq = 392.0; break;
-                                    case 5: release_freq = 440.0; break;
-                                    case 6: release_freq = 493.9; break;
-                                    case 7: release_freq = 277.2; break;
-                                    case 8: release_freq = 311.1; break;
-                                    case 9: release_freq = 370.0; break;
-                                    case 10: release_freq = 415.3; break;
-                                    case 11: release_freq = 466.2; break;
-                                }
-                                for (int j = 0; j < multi_data->num_sounds; j++) {
-                                    if (multi_data->sounds[j].params.frequency == release_freq) {
-                                        multi_data->sounds[j].is_active = 0;
-                                        multi_data->sounds[j].release_start_time = multi_data->current_time;
-                                        break;
-                                    }
-                                }
-                                active_keys[i] = 0;
-                                fprintf(log_file, "Key %d released: %.1fHz\n", i, release_freq);
-                                fflush(log_file);
-                            }
-                        }
+                        fflush(log_file);
                     }
                 }
+            } 
+            // if (ev.ch == TB_KEY_SPACE) {
+            if (ev.ch == 'q') {
+                // Release all active keys
+                fprintf(log_file, "Pressed space to release all keys\n");
+                fflush(log_file);
+
+                for (int i = 0; i < 12; i++) {
+                    if (active_keys[i]) {
+                        double release_freq = 0.0;
+                        switch (i) {
+                            case 0: release_freq = 261.6; break;
+                            case 1: release_freq = 293.7; break;
+                            case 2: release_freq = 329.6; break;
+                            case 3: release_freq = 349.2; break;
+                            case 4: release_freq = 392.0; break;
+                            case 5: release_freq = 440.0; break;
+                            case 6: release_freq = 493.9; break;
+                            case 7: release_freq = 277.2; break;
+                            case 8: release_freq = 311.1; break;
+                            case 9: release_freq = 370.0; break;
+                            case 10: release_freq = 415.3; break;
+                            case 11: release_freq = 466.2; break;
+                        }
+                        for (int j = 0; j < multi_data->num_sounds; j++) {
+                            if (multi_data->sounds[j].params.frequency == release_freq) {
+                                multi_data->sounds[j].is_active = 0;
+                                multi_data->sounds[j].release_start_time = multi_data->current_time;
+                                fprintf(log_file, "Key %d released: %.1fHz\n", i, release_freq);
+                                fflush(log_file);
+                                break;
+                            }
+                        }
+                        active_keys[i] = 0;
+                    }
+                }
+                snprintf(info_text, sizeof(info_text), "All keys released");
             }
         }
 
@@ -507,7 +512,7 @@ void play_sound_stream() {
 
     // add_synth(&multi_data, 200.0);
     // add_synth(&multi_data, 193.0);
-    add_synth(&multi_data, 150.0);
+    // add_synth(&multi_data, 150.0);
 
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
