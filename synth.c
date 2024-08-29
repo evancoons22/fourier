@@ -22,6 +22,8 @@ FILE *log_file;
 #define PI 3.14159265358979323846
 #define MAX_SOUNDS 12
 #define NUM_BUFFERS 3
+#define RECENT_ACTIONS_MAX 10
+
 
 
 #if defined(__GNUC__) || defined(__clang__)
@@ -83,6 +85,11 @@ typedef struct {
     // atomic_double_t current_time;
     double current_time;
 } MultiSynthData;
+
+typedef struct {
+    char actions[RECENT_ACTIONS_MAX][50];
+    int action_count;
+} RecentActions;
 
 // Function prototypes
 void initialize_buffer_manager(BufferManager *bm);
@@ -353,74 +360,226 @@ void initialize_multi_syth_data(MultiSynthData *data) {
     pthread_mutex_init(&data->mutex, NULL);
 }
 
-void draw_piano3(struct tb_event *ev, int highlighted_key) {
-    int startx = 4;  // Moved right
-    int starty = 4;  // Moved down
-    int key_width = 8;  // Doubled
-    int key_height = 6;  // Doubled
-    int white_keys = 7;
 
-    // Clear the screen
-    tb_clear();
+//void tb_print(int x, int y, uint16_t fg, uint16_t bg, const char *str) {
+//    while (*str) {
+//        tb_set_cell(x++, y, *str++, fg, bg);
+//    }
+//}
 
-    // Draw the outline of the keyboard
-    for (int y = starty; y < starty + key_height + 2; y++) {
-        tb_set_cell(startx - 1, y, '|', TB_WHITE, TB_DEFAULT);
-        tb_set_cell(startx + white_keys * key_width, y, '|', TB_WHITE, TB_DEFAULT);
+// Function to add recent action
+void add_recent_action(RecentActions *recent_actions, const char *action) {
+    if (recent_actions->action_count < RECENT_ACTIONS_MAX) {
+        strcpy(recent_actions->actions[recent_actions->action_count], action);
+        recent_actions->action_count++;
+    } else {
+        // Shift actions up and add new action at the end
+        for (int i = 1; i < RECENT_ACTIONS_MAX; i++) {
+            strcpy(recent_actions->actions[i - 1], recent_actions->actions[i]);
+        }
+        strcpy(recent_actions->actions[RECENT_ACTIONS_MAX - 1], action);
     }
-    for (int x = startx; x < startx + white_keys * key_width; x++) {
-        tb_set_cell(x, starty - 1, '-', TB_WHITE, TB_DEFAULT);
-        tb_set_cell(x, starty + key_height + 1, '-', TB_WHITE, TB_DEFAULT);
+}
+
+void draw_box(int startx, int starty, int width, int height, const char *title) {
+    // Draw top and bottom borders
+    for (int x = startx; x <= startx + width; x++) {
+        tb_set_cell(x, starty, '-', TB_WHITE, TB_DEFAULT);
+        tb_set_cell(x, starty + height, '-', TB_WHITE, TB_DEFAULT);
     }
+    // Draw left and right borders
+    for (int y = starty; y <= starty + height; y++) {
+        tb_set_cell(startx, y, '|', TB_WHITE, TB_DEFAULT);
+        tb_set_cell(startx + width, y, '|', TB_WHITE, TB_DEFAULT);
+    }
+    // Draw corners
+    tb_set_cell(startx, starty, '+', TB_WHITE, TB_DEFAULT);
+    tb_set_cell(startx + width, starty, '+', TB_WHITE, TB_DEFAULT);
+    tb_set_cell(startx, starty + height, '+', TB_WHITE, TB_DEFAULT);
+    tb_set_cell(startx + width, starty + height, '+', TB_WHITE, TB_DEFAULT);
+    // Draw title
+    tb_print(startx + 2, starty, TB_WHITE, TB_DEFAULT, title);
+}
+
+void draw_recent_actions(int startx, int starty, RecentActions *recent_actions) {
+    int width = 40;
+    int height = RECENT_ACTIONS_MAX + 2;
+    draw_box(startx, starty, width, height, " Recent Actions ");
+    for (int i = 0; i < recent_actions->action_count; i++) {
+        tb_print(startx + 2, starty + 2 + i, TB_WHITE, TB_DEFAULT, recent_actions->actions[i]);
+    }
+}
+
+void draw_constants(int startx, int starty) {
+    int width = 30;
+    int height = 6;
+    draw_box(startx, starty, width, height, " Constants ");
+    char buffer[50];
+    snprintf(buffer, sizeof(buffer), "SAMPLE_RATE: %d", SAMPLE_RATE);
+    tb_print(startx + 2, starty + 2, TB_WHITE, TB_DEFAULT, buffer);
+    snprintf(buffer, sizeof(buffer), "FRAMES_PER_BUFFER: %d", FRAMES_PER_BUFFER);
+    tb_print(startx + 2, starty + 3, TB_WHITE, TB_DEFAULT, buffer);
+    snprintf(buffer, sizeof(buffer), "BUFFER_SIZE: %d", BUFFER_SIZE);
+    tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
+}
+
+
+void draw_synth_params(int startx, int starty, MultiSynthData *multi_data) {
+    int width = 150;  // Adjust width based on the number of parameters
+    int height = multi_data->num_sounds * 2 + 4;  // Height based on the number of sounds + header row + extra space
+    draw_box(startx, starty, width, height, " Parameters ");
+
+    // Header row
+    tb_print(startx + 2, starty + 2, TB_WHITE, TB_DEFAULT, "Key ");
+    tb_print(startx + 6, starty + 2, TB_WHITE, TB_DEFAULT, "Freq ");
+    tb_print(startx + 16, starty + 2, TB_WHITE, TB_DEFAULT, "Amp  ");
+    tb_print(startx + 26, starty + 2, TB_WHITE, TB_DEFAULT, "Waveform ");
+    tb_print(startx + 36, starty + 2, TB_WHITE, TB_DEFAULT, "Cutoff ");
+    tb_print(startx + 46, starty + 2, TB_WHITE, TB_DEFAULT, "LFO Freq ");
+    tb_print(startx + 58, starty + 2, TB_WHITE, TB_DEFAULT, "LFO Depth ");
+    tb_print(startx + 70, starty + 2, TB_WHITE, TB_DEFAULT, "LFO Mod Rate ");
+    tb_print(startx + 84, starty + 2, TB_WHITE, TB_DEFAULT, "LFO Mod Depth ");
+    tb_print(startx + 98, starty + 2, TB_WHITE, TB_DEFAULT, "Env Attack ");
+    tb_print(startx + 110, starty + 2, TB_WHITE, TB_DEFAULT, "Env Decay ");
+    tb_print(startx + 122, starty + 2, TB_WHITE, TB_DEFAULT, "Env Sustain ");
+    tb_print(startx + 134, starty + 2, TB_WHITE, TB_DEFAULT, "Env Release ");
+
+    // Print each sound's parameters
+    for (int i = 0; i < multi_data->num_sounds; i++) {
+        SynthParams *params = &multi_data->sounds[i].params;
+        int y_offset = starty + 4 + i * 2;
+
+        char buffer[20];
+        snprintf(buffer, sizeof(buffer), "%2d", i);
+        tb_print(startx + 2, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->frequency);
+        tb_print(startx + 6, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->amplitude);
+        tb_print(startx + 16, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%d", params->waveform_type);
+        tb_print(startx + 26, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->filter_cutoff);
+        tb_print(startx + 36, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_frequency);
+        tb_print(startx + 46, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_depth);
+        tb_print(startx + 58, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_freq_mod_rate);
+        tb_print(startx + 70, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_freq_mod_depth);
+        tb_print(startx + 84, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_envelope_attack);
+        tb_print(startx + 98, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_envelope_decay);
+        tb_print(startx + 110, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_envelope_sustain);
+        tb_print(startx + 122, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+
+        snprintf(buffer, sizeof(buffer), "%.1f", params->lfo_envelope_release);
+        tb_print(startx + 134, y_offset, TB_WHITE, TB_DEFAULT, buffer);
+    }
+}
+
+
+void draw_piano_keyboard(int startx, int starty, int highlighted_key, int *active_keys) {
+    int white_key_width = 4;
+    int white_key_height = 7;
+    int black_key_width = 3;
+    int black_key_height = 4;
+
+    const char *white_keys = "SDFGHJK";
+    const char *black_keys = "ERYUI";
+    int black_key_positions[] = {1, 2, 4, 5, 6};
 
     // Draw white keys
-    const char *white_keys_letters = "SDFGHJK";
     for (int i = 0; i < 7; i++) {
-        int x = startx + i * key_width;
-        uint16_t fg = (i == highlighted_key) ? TB_BLACK : TB_WHITE;
-        uint16_t bg = (i == highlighted_key) ? TB_WHITE : TB_DEFAULT;
-        for (int y = starty; y < starty + key_height; y++) {
-            for (int dx = 0; dx < key_width - 1; dx++) {
-                tb_set_cell(x + dx, y, ' ', TB_DEFAULT, bg);
+        int x = startx + i * white_key_width;
+        int y = starty;
+        uint16_t bg = (highlighted_key == i || active_keys[i]) ? TB_GREEN : TB_WHITE;
+        // Draw key body
+        for (int dx = 0; dx < white_key_width; dx++) {
+            for (int dy = 0; dy < white_key_height; dy++) {
+                tb_set_cell(x + dx, y + dy, ' ', TB_BLACK, bg);
             }
         }
-        tb_set_cell(x + 1, starty + key_height, white_keys_letters[i], fg, bg);
+        // Draw key label
+        tb_set_cell(x + white_key_width / 2, y + white_key_height - 1, white_keys[i], TB_BLACK, bg);
     }
 
     // Draw black keys
-    const char *black_keys = "ERYUI";
-    int black_key_positions[] = {1, 2, 4, 5, 6};
     for (int i = 0; i < 5; i++) {
-        int x = startx + black_key_positions[i] * key_width - (i < 2 ? 4 : 6);
-        uint16_t fg = (i + 7 == highlighted_key) ? TB_WHITE : TB_BLACK;
-        uint16_t bg = (i + 7 == highlighted_key) ? TB_BLACK : TB_DEFAULT;
-        tb_set_cell(x, starty, black_keys[i], fg, bg);
-        tb_set_cell(x, starty + 1, ' ', TB_DEFAULT, TB_BLACK);
-        tb_set_cell(x, starty + 2, ' ', TB_DEFAULT, TB_BLACK);
-    }
-
-    // Draw the keypress info box
-    int info_startx = 2;
-    int info_starty = starty + key_height + 4;
-    for (int y = info_starty; y < info_starty + 3; y++) {
-        for (int x = info_startx; x < info_startx + 60; x++) {
-            if (y == info_starty || y == info_starty + 2 || x == info_startx || x == info_startx + 59) {
-                tb_set_cell(x, y, (y == info_starty || y == info_starty + 2) ? '-' : '|', TB_WHITE, TB_DEFAULT);
+        int x = startx + black_key_positions[i] * white_key_width - black_key_width / 2;
+        int y = starty;
+        uint16_t bg = (highlighted_key == i + 7 || active_keys[i + 7]) ? TB_RED : TB_BLACK;
+        // Draw key body
+        for (int dx = 0; dx < black_key_width; dx++) {
+            for (int dy = 0; dy < black_key_height; dy++) {
+                tb_set_cell(x + dx, y + dy, ' ', TB_WHITE, bg);
             }
         }
+        // Draw key label
+        tb_set_cell(x + black_key_width / 2, y + black_key_height - 1, black_keys[i], TB_WHITE, bg);
     }
-    tb_print(info_startx + 2, info_starty + 1, TB_WHITE, TB_DEFAULT, " Key Press Info | ");
-    // Present the changes to the screen
+}
+
+void draw_interface(MultiSynthData *multi_data, RecentActions *recent_actions, int highlighted_key, int *active_keys) {
+    tb_clear();
+
+    // Define positions
+    int recent_actions_x = 2;
+    int recent_actions_y = 2;
+
+    int piano_x = 45;
+    int piano_y = 5;
+
+    int constants_x = 75;
+    int constants_y = 2;
+
+    int synth_params_x = 2;
+    int synth_params_y = 18; 
+
+    // Draw components
+    draw_recent_actions(recent_actions_x, recent_actions_y, recent_actions);
+    draw_piano_keyboard(piano_x, piano_y, highlighted_key, active_keys);
+    draw_constants(constants_x, constants_y);
+    draw_synth_params(synth_params_x, synth_params_y, multi_data);
+
     tb_present();
 }
 
 
 void *termbox_thread(void *arg) {
     MultiSynthData *multi_data = (MultiSynthData *)arg;
+    RecentActions recent_actions = {.action_count = 0};
     struct tb_event ev;
     int highlighted_key = -1;
-    char info_text[40] = "";
-    int active_keys[12] = {0}; // Track active keys
+    int key_to_freq[] = {
+        130, // S
+        146, // D
+        164, // F
+        174, // G
+        196, // H
+        220, // J
+        246, // K
+        138, // E
+        155, // R
+        185, // Y
+        207, // U
+        233  // I
+    };
+    char key_chars[] = {'s','d','f','g','h','j','k','e','r','y','u','i'};
+    int active_keys[12] = {0};
 
     if (tb_init() != 0) {
         fprintf(stderr, "tb_init() failed\n");
@@ -430,94 +589,41 @@ void *termbox_thread(void *arg) {
     tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
     tb_set_output_mode(TB_OUTPUT_NORMAL);
 
-    draw_piano3(&ev, highlighted_key);
+    draw_interface(multi_data, &recent_actions, highlighted_key, active_keys);
 
-    while (tb_poll_event(&ev) != -1) {
+    while (1) {
+        int tb_result = tb_poll_event(&ev);
+        if (tb_result == -1) break;
         if (ev.type == TB_EVENT_KEY) {
             if (ev.key == TB_KEY_ESC) {
                 break;
             }
-
+            char action_text[50];
             highlighted_key = -1;
-            int key_index = -1;
-            double frequency = 0.0;
-
-            switch (ev.ch) {
-                case 's': key_index = 0; frequency = 130.8; break;
-                case 'd': key_index = 1; frequency = 146.8; break;
-                case 'f': key_index = 2; frequency = 164.8; break;
-                case 'g': key_index = 3; frequency = 174.6; break;
-                case 'h': key_index = 4; frequency = 196.0; break;
-                case 'j': key_index = 5; frequency = 220.0; break;
-                case 'k': key_index = 6; frequency = 246.9; break;
-                case 'e': key_index = 7; frequency = 138.6; break;
-                case 'r': key_index = 8; frequency = 155.6; break;
-                case 'y': key_index = 9; frequency = 185.0; break;
-                case 'u': key_index = 10; frequency = 207.7; break;
-                case 'i': key_index = 11; frequency = 233.1; break;
-            }
-
-            if (key_index != -1) {
-                if (ev.type == TB_EVENT_KEY && ev.key == 0) {
-                    // Key press
-                    if (!active_keys[key_index]) {
-                        add_synth(multi_data, frequency);
-                        active_keys[key_index] = 1;
-                        highlighted_key = key_index;
-                        snprintf(info_text, sizeof(info_text), "%c pressed: %.1fHz", ev.ch, frequency);
-                        fprintf(log_file, "%c pressed: %.1fHz\n", ev.ch, frequency);
-                        fflush(log_file);
-                    }
-                }
-            } 
-            // if (ev.ch == TB_KEY_SPACE) {
-            if (ev.ch == 'q') {
-                // Release all active keys
-                fprintf(log_file, "Pressed space to release all keys\n");
-                fflush(log_file);
-
-                for (int i = 0; i < 12; i++) {
-                    if (active_keys[i]) {
-                        double release_freq = 0.0;
-                        switch (i) {
-                            case 0: release_freq = 261.6; break;
-                            case 1: release_freq = 293.7; break;
-                            case 2: release_freq = 329.6; break;
-                            case 3: release_freq = 349.2; break;
-                            case 4: release_freq = 392.0; break;
-                            case 5: release_freq = 440.0; break;
-                            case 6: release_freq = 493.9; break;
-                            case 7: release_freq = 277.2; break;
-                            case 8: release_freq = 311.1; break;
-                            case 9: release_freq = 370.0; break;
-                            case 10: release_freq = 415.3; break;
-                            case 11: release_freq = 466.2; break;
-                        }
-                        for (int j = 0; j < multi_data->num_sounds; j++) {
-                            if (multi_data->sounds[j].params.frequency == release_freq) {
-                                multi_data->sounds[j].is_active = 0;
-                                multi_data->sounds[j].release_start_time = multi_data->current_time;
-                                fprintf(log_file, "Key %d released: %.1fHz\n", i, release_freq);
-                                fflush(log_file);
-                                break;
-                            }
-                        }
+            for (int i = 0; i < 12; i++) {
+                if (ev.ch == key_chars[i]) {
+                    highlighted_key = i;
+                    if (!active_keys[i]) {
+                        add_synth(multi_data, key_to_freq[i]); // waveform_type set to 0
+                        active_keys[i] = 1;
+                        snprintf(action_text, sizeof(action_text), "Key %c pressed: %dHz", ev.ch, key_to_freq[i]);
+                        add_recent_action(&recent_actions, action_text);
+                    } else {
+                        // remove_synth(multi_data, key_to_freq[i]);
                         active_keys[i] = 0;
+                        snprintf(action_text, sizeof(action_text), "Key %c released", ev.ch);
+                        add_recent_action(&recent_actions, action_text);
                     }
+                    break;
                 }
-                snprintf(info_text, sizeof(info_text), "All keys released");
             }
+            draw_interface(multi_data, &recent_actions, highlighted_key, active_keys);
         }
-
-        draw_piano3(&ev, highlighted_key);
-        tb_print(24, 15, TB_WHITE, TB_DEFAULT, info_text);
-        tb_present();
     }
+
     tb_shutdown();
     return NULL;
 }
-
-
 
 
 void play_sound_stream() {
