@@ -16,10 +16,11 @@ How to use synth:
 
 To dos: 
 - [X] fix black key highlight.
+- [X] new waveform types (sine squared, noise, pulse)
 - [ ] add decay for keys so they stop
-- [ ] remove decayed keys after amplitude < epsilon
-- [ ] Large keyboard in UI
-- [ ] 
+- [ ] remove sounds after release time is up
+- [ ] Larger keyboard in UI
+- [ ] key params in UI
 
 
 

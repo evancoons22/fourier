@@ -148,6 +148,15 @@ void fill_buffer(SynthData *sound, int buffer_index, double current_time) {
             case 3: // Triangle
                 sample = fabs(4.0 * (modulated_freq * t - floor(0.5 + modulated_freq * t))) - 1.0;
                 break;
+            case 4: // Pulse
+                sample = (fmod(t * modulated_freq, 1.0) < 0.5) ? 1.0 : -1.0;
+                break;
+            case 5: // Noise
+                sample = ((double)rand() / RAND_MAX) * 2.0 - 1.0;
+                break;
+            case 6: // Sine Squared
+                sample = pow(sin(M_PI * modulated_freq * t), 2);
+                break;
         }
 
         // Apply amplitude
@@ -285,7 +294,7 @@ void add_synth(MultiSynthData *multi_data, double frequency) {
     new_sound->params = (SynthParams){
         frequency, // frequency
         1.0,       // amplitude
-        0,         // waveform_type
+        6,         // waveform_type
         1000.0,    // filter_cutoff
         0.5,       // lfo_frequency
         0.5,       // lfo_depth
@@ -434,18 +443,18 @@ void *termbox_thread(void *arg) {
             double frequency = 0.0;
 
             switch (ev.ch) {
-                case 's': key_index = 0; frequency = 261.6; break;
-                case 'd': key_index = 1; frequency = 293.7; break;
-                case 'f': key_index = 2; frequency = 329.6; break;
-                case 'g': key_index = 3; frequency = 349.2; break;
-                case 'h': key_index = 4; frequency = 392.0; break;
-                case 'j': key_index = 5; frequency = 440.0; break;
-                case 'k': key_index = 6; frequency = 493.9; break;
-                case 'e': key_index = 7; frequency = 277.2; break;
-                case 'r': key_index = 8; frequency = 311.1; break;
-                case 'y': key_index = 9; frequency = 370.0; break;
-                case 'u': key_index = 10; frequency = 415.3; break;
-                case 'i': key_index = 11; frequency = 466.2; break;
+                case 's': key_index = 0; frequency = 130.8; break;
+                case 'd': key_index = 1; frequency = 146.8; break;
+                case 'f': key_index = 2; frequency = 164.8; break;
+                case 'g': key_index = 3; frequency = 174.6; break;
+                case 'h': key_index = 4; frequency = 196.0; break;
+                case 'j': key_index = 5; frequency = 220.0; break;
+                case 'k': key_index = 6; frequency = 246.9; break;
+                case 'e': key_index = 7; frequency = 138.6; break;
+                case 'r': key_index = 8; frequency = 155.6; break;
+                case 'y': key_index = 9; frequency = 185.0; break;
+                case 'u': key_index = 10; frequency = 207.7; break;
+                case 'i': key_index = 11; frequency = 233.1; break;
             }
 
             if (key_index != -1) {
