@@ -16,10 +16,13 @@ To dos:
 - [X] fix black key highlight.
 - [X] new waveform types (sine squared, noise, pulse)
 - [X] key params in UI
-- [ ] add decay for keys so they stop
+- [X] Larger keyboard in UI
+- [X] display waveform type in constants
+- [X] Key highlights removed when pressed again
+- [X] Remove sound functionality. (on second press)
+- [ ] implement decay for keys and then naturally stop them
 - [ ] properly remove sounds after release time is up
-- [ ] Larger keyboard in UI
-
-
-
+- [ ] add args to the program for waveform type and octave
+    - [X] waveform type
+    - [ ] octave
 

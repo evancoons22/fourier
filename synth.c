@@ -24,7 +24,7 @@ FILE *log_file;
 #define NUM_BUFFERS 3
 #define RECENT_ACTIONS_MAX 10
 
-
+int global_waveform_type = 0;  // Default to sine wave
 
 #if defined(__GNUC__) || defined(__clang__)
 #define atomic_store_double(ptr, val) __atomic_store_n((ptr), (val), __ATOMIC_SEQ_CST)
@@ -301,10 +301,10 @@ void add_synth(MultiSynthData *multi_data, double frequency) {
     new_sound->params = (SynthParams){
         frequency, // frequency
         1.0,       // amplitude
-        6,         // waveform_type
+        global_waveform_type, // waveform_type (now using the global variable)
         1000.0,    // filter_cutoff
-        0.5,       // lfo_frequency
-        0.5,       // lfo_depth
+        1.2,       // lfo_frequency
+        0.1,       // lfo_depth
         0.1,       // lfo_freq_mod_rate
         0.5,       // lfo_freq_mod_depth
         0.1,       // lfo_envelope_attack
@@ -336,19 +336,22 @@ void add_synth(MultiSynthData *multi_data, double frequency) {
     fflush(log_file);
 }
 
-//
-//
-// this is a bad way to do this right now
-// really should be using a linked list or give each synth an id
-void remove_synth(MultiSynthData *multi_data, SynthData *synth_data) {
+void remove_synth(MultiSynthData *multi_data, double frequency) {
     pthread_mutex_lock(&multi_data->mutex);
     for (int i = 0; i < multi_data->num_sounds; i++) {
-        if (multi_data->sounds[i].params.frequency ==
-                synth_data->params.frequency) {
-            multi_data->num_sounds--;
-            for (int j = i; j < multi_data->num_sounds; j++) {
+        if (multi_data->sounds[i].params.frequency == frequency) {
+            // Free any resources associated with this sound
+            // (e.g., buffer memory)
+            for (int j = 0; j < NUM_BUFFERS; j++) {
+                free(multi_data->sounds[i].buffer_manager.buffers[j]);
+            }
+            
+            // Shift remaining sounds
+            for (int j = i; j < multi_data->num_sounds - 1; j++) {
                 multi_data->sounds[j] = multi_data->sounds[j + 1];
             }
+            
+            multi_data->num_sounds--;
             break;
         }
     }
@@ -421,6 +424,31 @@ void draw_constants(int startx, int starty) {
     tb_print(startx + 2, starty + 3, TB_WHITE, TB_DEFAULT, buffer);
     snprintf(buffer, sizeof(buffer), "BUFFER_SIZE: %d", BUFFER_SIZE);
     tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
+
+    switch (global_waveform_type) {
+        case 0: // Sine
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 1: // Square
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SQUARE ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 2: // Sawtooth
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SAWTOOTH ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 3: // Triangle
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: TRIANGLE ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 4: // Pulse
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: PULSE ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 5: // Noise
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: NOISE ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+        case 6: // Sine Squared
+            snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE SQUARED ");
+            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            
+    }
 }
 
 
@@ -492,7 +520,7 @@ void draw_synth_params(int startx, int starty, MultiSynthData *multi_data) {
 }
 
 
-void draw_piano_keyboard(int startx, int starty, int highlighted_key, int *active_keys) {
+void draw_piano_keyboard(int startx, int starty, int *active_keys) {
     int white_key_width = 4;
     int white_key_height = 7;
     int black_key_width = 3;
@@ -506,7 +534,7 @@ void draw_piano_keyboard(int startx, int starty, int highlighted_key, int *activ
     for (int i = 0; i < 7; i++) {
         int x = startx + i * white_key_width;
         int y = starty;
-        uint16_t bg = (highlighted_key == i || active_keys[i]) ? TB_GREEN : TB_WHITE;
+        uint16_t bg = (active_keys[i]) ? TB_GREEN : TB_WHITE;
         // Draw key body
         for (int dx = 0; dx < white_key_width; dx++) {
             for (int dy = 0; dy < white_key_height; dy++) {
@@ -521,7 +549,7 @@ void draw_piano_keyboard(int startx, int starty, int highlighted_key, int *activ
     for (int i = 0; i < 5; i++) {
         int x = startx + black_key_positions[i] * white_key_width - black_key_width / 2;
         int y = starty;
-        uint16_t bg = (highlighted_key == i + 7 || active_keys[i + 7]) ? TB_RED : TB_BLACK;
+        uint16_t bg = (active_keys[i + 7]) ? TB_RED : TB_BLACK;
         // Draw key body
         for (int dx = 0; dx < black_key_width; dx++) {
             for (int dy = 0; dy < black_key_height; dy++) {
@@ -551,7 +579,7 @@ void draw_interface(MultiSynthData *multi_data, RecentActions *recent_actions, i
 
     // Draw components
     draw_recent_actions(recent_actions_x, recent_actions_y, recent_actions);
-    draw_piano_keyboard(piano_x, piano_y, highlighted_key, active_keys);
+    draw_piano_keyboard(piano_x, piano_y, active_keys);
     draw_constants(constants_x, constants_y);
     draw_synth_params(synth_params_x, synth_params_y, multi_data);
 
@@ -609,7 +637,7 @@ void *termbox_thread(void *arg) {
                         snprintf(action_text, sizeof(action_text), "Key %c pressed: %dHz", ev.ch, key_to_freq[i]);
                         add_recent_action(&recent_actions, action_text);
                     } else {
-                        // remove_synth(multi_data, key_to_freq[i]);
+                        remove_synth(multi_data, key_to_freq[i]);
                         active_keys[i] = 0;
                         snprintf(action_text, sizeof(action_text), "Key %c released", ev.ch);
                         add_recent_action(&recent_actions, action_text);
@@ -626,27 +654,42 @@ void *termbox_thread(void *arg) {
 }
 
 
-void play_sound_stream() {
+int main(int argc, char *argv[]) {
+    if (argc != 3 || strcmp(argv[1], "-type") != 0) {
+        fprintf(stderr, "Usage: %s -type <waveform_type>\n", argv[0]);
+        return 1;
+    }
+
+    int waveform_type = atoi(argv[2]);
+    if (waveform_type < 0 || waveform_type > 6) {
+        fprintf(stderr, "Invalid waveform type. Must be between 0 and 6.\n");
+        return 1;
+    }
+
+    global_waveform_type = waveform_type;
+
+
+    log_file = fopen("debug.log", "w");
+    if (!log_file) {
+        fprintf(stderr, "Failed to open log file\n");
+        return 1;
+    }
+
     PaStream *stream;
     PaError err;
 
     MultiSynthData multi_data = {0};
-    // atomic_init(&multi_data.current_time, 0.0);
-    // set the current time to zero but without the atomic part
     multi_data.current_time = 0.0;
     pthread_mutex_init(&multi_data.mutex, NULL);
 
-    // add_synth(&multi_data, 200.0);
-    // add_synth(&multi_data, 193.0);
     add_synth(&multi_data, 150.0);
-    // set this synths amplitude to 0
     multi_data.sounds[0].params.amplitude = 0.0;
+    multi_data.sounds[0].params.waveform_type = waveform_type;
 
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
 
     err = Pa_Initialize();
-    // initialize_multi_buffer(&multi_data);
     if (err != paNoError)
         goto error;
 
@@ -670,15 +713,11 @@ void play_sound_stream() {
         goto error;
 
     err = Pa_StartStream(stream);
-    // Pa_Sleep(500);
     if (err != paNoError)
         goto error;
 
     pthread_join(ui_thread, NULL);
     fclose(log_file);
-
-    // printf("Playing. Ctrl + C to stop.\n");
-    // getchar();
 
     err = Pa_StopStream(stream);
     if (err != paNoError)
@@ -690,23 +729,13 @@ void play_sound_stream() {
 
     Pa_Terminate();
 
+    return 0;
+
 error:
     Pa_Terminate();
     fprintf(stderr, "An error occurred while using the portaudio stream\n");
     fprintf(stderr, "Error number: %d\n", err);
     fprintf(stderr, "Error message: %s\n", Pa_GetErrorText(err));
-}
 
-
-int main() {
-    log_file = fopen("debug.log", "w");
-    if (!log_file) {
-        fprintf(stderr, "Failed to open log file\n");
-        return 1;
-    }
-
-    play_sound_stream();
-
-
-    return 0;
+    return 1;
 }
