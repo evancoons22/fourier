@@ -429,24 +429,31 @@ void draw_constants(int startx, int starty) {
         case 0: // Sine
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 1: // Square
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SQUARE ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 2: // Sawtooth
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SAWTOOTH ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 3: // Triangle
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: TRIANGLE ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 4: // Pulse
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: PULSE ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 5: // Noise
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: NOISE ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
         case 6: // Sine Squared
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE SQUARED ");
             tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            break;
             
     }
 }

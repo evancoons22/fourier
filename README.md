@@ -26,3 +26,8 @@ To dos:
     - [X] waveform type
     - [ ] octave
 
+## example
+
+<img src="https://github.com/evancoons22/FT/blob/main/output.gif" width="640">
+
+
