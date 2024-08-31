@@ -11,7 +11,7 @@
 #include <time.h>
 #include <unistd.h>
 #include <stdatomic.h>
-
+#include <math.h>
 
 
 FILE *log_file;
@@ -25,7 +25,8 @@ FILE *log_file;
 #define RECENT_ACTIONS_MAX 10
 
 int global_waveform_type = 0;  // Default to sine wave
-
+int octave = 4;  // Default octave
+                 
 #if defined(__GNUC__) || defined(__clang__)
 #define atomic_store_double(ptr, val) __atomic_store_n((ptr), (val), __ATOMIC_SEQ_CST)
 #define atomic_load_double(ptr) __atomic_load_n((ptr), __ATOMIC_SEQ_CST)
@@ -599,19 +600,20 @@ void *termbox_thread(void *arg) {
     RecentActions recent_actions = {.action_count = 0};
     struct tb_event ev;
     int highlighted_key = -1;
-    int key_to_freq[] = {
-        130, // S
-        146, // D
-        164, // F
-        174, // G
-        196, // H
-        220, // J
-        246, // K
-        138, // E
-        155, // R
-        185, // Y
-        207, // U
-        233  // I
+    double base_freq = 16.35 * pow(2, octave); // C0 frequency * 2^octave
+    double key_to_freq[] = {
+        base_freq * pow(2, 3/12.0),  // S (D#)
+        base_freq * pow(2, 5/12.0),  // D (F)
+        base_freq * pow(2, 7/12.0),  // F (G)
+        base_freq * pow(2, 8/12.0),  // G (G#)
+        base_freq * pow(2, 10/12.0), // H (A#)
+        base_freq * pow(2, 12/12.0), // J (C)
+        base_freq * pow(2, 14/12.0), // K (D)
+        base_freq * pow(2, 4/12.0),  // E (E)
+        base_freq * pow(2, 6/12.0),  // R (F#)
+        base_freq * pow(2, 9/12.0),  // Y (A)
+        base_freq * pow(2, 11/12.0), // U (B)
+        base_freq * pow(2, 13/12.0)  // I (C#)
     };
     char key_chars[] = {'s','d','f','g','h','j','k','e','r','y','u','i'};
     int active_keys[12] = {0};
@@ -641,7 +643,7 @@ void *termbox_thread(void *arg) {
                     if (!active_keys[i]) {
                         add_synth(multi_data, key_to_freq[i]); // waveform_type set to 0
                         active_keys[i] = 1;
-                        snprintf(action_text, sizeof(action_text), "Key %c pressed: %dHz", ev.ch, key_to_freq[i]);
+                        snprintf(action_text, sizeof(action_text), "Key %c pressed: %fHz", ev.ch, key_to_freq[i]);
                         add_recent_action(&recent_actions, action_text);
                     } else {
                         remove_synth(multi_data, key_to_freq[i]);
@@ -662,8 +664,8 @@ void *termbox_thread(void *arg) {
 
 
 int main(int argc, char *argv[]) {
-    if (argc != 3 || strcmp(argv[1], "-type") != 0) {
-        fprintf(stderr, "Usage: %s -type <waveform_type>\n", argv[0]);
+    if (argc != 5 || strcmp(argv[1], "-type") != 0 || strcmp(argv[3], "-octave") != 0) {
+        fprintf(stderr, "Usage: %s -type <waveform_type> -octave <octave_number>\n", argv[0]);
         return 1;
     }
 
@@ -673,8 +675,14 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    global_waveform_type = waveform_type;
+    int octave_arg = atoi(argv[4]);
+    if (octave < 0 || octave > 8) {
+        fprintf(stderr, "Invalid octave. Must be between 0 and 8.\n");
+        return 1;
+    }
 
+    octave = octave_arg;
+    global_waveform_type = waveform_type;
 
     log_file = fopen("debug.log", "w");
     if (!log_file) {

@@ -12,6 +12,14 @@ How to use synth:
 1. `$ make`
 2.  `$ ./synth`
 
+## example
+
+<img src="https://github.com/evancoons22/FT/blob/main/output.gif" width="640"/>
+
+![output](https://github.com/evancoons22/FT/blob/main/output.gif#gh-light-mode-only){width=640px}
+
+
+
 To dos: 
 - [X] fix black key highlight.
 - [X] new waveform types (sine squared, noise, pulse)
@@ -20,14 +28,11 @@ To dos:
 - [X] display waveform type in constants
 - [X] Key highlights removed when pressed again
 - [X] Remove sound functionality. (on second press)
+- [X] add args to the program for waveform type and octave
+    - [X] waveform type
+    - [X ] octave
 - [ ] implement decay for keys and then naturally stop them
 - [ ] properly remove sounds after release time is up
-- [ ] add args to the program for waveform type and octave
-    - [X] waveform type
-    - [ ] octave
 
-## example
-
-<img src="https://github.com/evancoons22/FT/blob/main/output.gif" width="640">
 
 
