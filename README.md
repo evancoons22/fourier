@@ -14,9 +14,7 @@ How to use synth:
 
 ## example
 
-<img src="https://github.com/evancoons22/FT/blob/main/output.gif">
-
-
+<img src="https://raw.githubusercontent.com/evancoons22/fourier/main/output.gif" width="620">            
 
 To dos: 
 - [X] fix black key highlight.
@@ -28,7 +26,7 @@ To dos:
 - [X] Remove sound functionality. (on second press)
 - [X] add args to the program for waveform type and octave
     - [X] waveform type
-    - [X ] octave
+    - [X] octave
 - [X] remove dummy sound (initialized but silent)
 - [ ] implement decay for keys and then naturally stop them
 - [ ] properly remove sounds after release time is up
