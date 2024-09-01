@@ -14,9 +14,7 @@ How to use synth:
 
 ## example
 
-<img src="https://github.com/evancoons22/FT/blob/main/output.gif" width="640"/>
-
-![output](https://github.com/evancoons22/FT/blob/main/output.gif#gh-light-mode-only){width=640px}
+<img src="https://github.com/evancoons22/FT/blob/main/output.gif">
 
 
 
@@ -31,8 +29,10 @@ To dos:
 - [X] add args to the program for waveform type and octave
     - [X] waveform type
     - [X ] octave
+- [X] remove dummy sound (initialized but silent)
 - [ ] implement decay for keys and then naturally stop them
 - [ ] properly remove sounds after release time is up
+- [ ] instead of toggle, press and release for sustain and release
 
 
 

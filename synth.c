@@ -481,9 +481,10 @@ void draw_synth_params(int startx, int starty, MultiSynthData *multi_data) {
     tb_print(startx + 134, starty + 2, TB_WHITE, TB_DEFAULT, "Env Release ");
 
     // Print each sound's parameters
-    for (int i = 0; i < multi_data->num_sounds; i++) {
+    for (int i = 1; i < multi_data->num_sounds; i++) {
         SynthParams *params = &multi_data->sounds[i].params;
-        int y_offset = starty + 4 + i * 2;
+        // int y_offset = starty + 4 + i * 2; // not printing first dummy sound
+        int y_offset = starty + 2 + i * 2;
 
         char buffer[20];
         snprintf(buffer, sizeof(buffer), "%2d", i);
@@ -697,9 +698,42 @@ int main(int argc, char *argv[]) {
     multi_data.current_time = 0.0;
     pthread_mutex_init(&multi_data.mutex, NULL);
 
-    add_synth(&multi_data, 150.0);
-    multi_data.sounds[0].params.amplitude = 0.0;
-    multi_data.sounds[0].params.waveform_type = waveform_type;
+    // add_synth(&multi_data, 150.0);
+    // multi_data.sounds[0].params.amplitude = 0.0;
+    // multi_data.sounds[0].params.waveform_type = waveform_type;
+
+    // -------------------------have to add sound for callback to start correctly-----------------------------------------------
+    SynthData *new_sound = &multi_data.sounds[multi_data.num_sounds];
+    // Initialize SynthData fields
+    new_sound->params = (SynthParams){
+        100, // frequency
+        0.0,       // amplitude
+        global_waveform_type, // waveform_type (now using the global variable)
+        1000.0,    // filter_cutoff
+        1.2,       // lfo_frequency
+        0.1,       // lfo_depth
+        0.1,       // lfo_freq_mod_rate
+        0.5,       // lfo_freq_mod_depth
+        0.1,       // lfo_envelope_attack
+        0.2,       // lfo_envelope_decay
+        0.7,       // lfo_envelope_sustain
+        0.3        // lfo_envelope_release
+    };
+    new_sound->phase = 0.0;
+    new_sound->lfo_phase = 0.0;
+    new_sound->lfo_envelope_value = 0.0;
+    new_sound->is_active = 1;
+    double current_time = multi_data.current_time;
+    new_sound->start_time = current_time;
+    new_sound->release_start_time = 0.0;
+    initialize_buffer_manager(&new_sound->buffer_manager);
+    // need to fill here, or for some reason, we get more clicking noises
+    fill_buffer(new_sound, 0, current_time);
+    fill_buffer(new_sound, 1, current_time);
+    fill_buffer(new_sound, 2, current_time);
+    atomic_store(&new_sound->buffer_manager.buffer_ready[0], 1);
+    multi_data.num_sounds++;
+    // ------------------------------------------------------------------------------------------------------------------------
 
     fprintf(log_file, "Initializing program... num_sounds: %d\n", multi_data.num_sounds);
     fflush(log_file);
