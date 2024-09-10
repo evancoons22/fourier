@@ -8,9 +8,7 @@ Project path:
 3. embedded system? 
 
 
-How to use synth: 
-1. `$ make`
-2.  `$ ./synth`
+Usage: `$ make && ./synth -type <waveform_type> -octave <octave_number>`
 
 ## example
 
