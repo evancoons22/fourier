@@ -407,10 +407,10 @@ void draw_box(int startx, int starty, int width, int height, const char *title) 
 
 void draw_recent_actions(int startx, int starty, RecentActions *recent_actions) {
     int width = 40;
-    int height = RECENT_ACTIONS_MAX + 2;
+    int height = RECENT_ACTIONS_MAX + 1;
     draw_box(startx, starty, width, height, " Recent Actions ");
     for (int i = 0; i < recent_actions->action_count; i++) {
-        tb_print(startx + 2, starty + 2 + i, TB_WHITE, TB_DEFAULT, recent_actions->actions[i]);
+        tb_print(startx + 2, starty + 1 + i, TB_WHITE, TB_DEFAULT, recent_actions->actions[i]);
     }
 }
 
@@ -420,40 +420,40 @@ void draw_constants(int startx, int starty) {
     draw_box(startx, starty, width, height, " Constants ");
     char buffer[50];
     snprintf(buffer, sizeof(buffer), "SAMPLE_RATE: %d", SAMPLE_RATE);
-    tb_print(startx + 2, starty + 2, TB_WHITE, TB_DEFAULT, buffer);
+    tb_print(startx + 2, starty + 1, TB_WHITE, TB_DEFAULT, buffer);
     snprintf(buffer, sizeof(buffer), "FRAMES_PER_BUFFER: %d", FRAMES_PER_BUFFER);
-    tb_print(startx + 2, starty + 3, TB_WHITE, TB_DEFAULT, buffer);
+    tb_print(startx + 2, starty + 2, TB_WHITE, TB_DEFAULT, buffer);
     snprintf(buffer, sizeof(buffer), "BUFFER_SIZE: %d", BUFFER_SIZE);
-    tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
+    tb_print(startx + 2, starty + 3, TB_WHITE, TB_DEFAULT, buffer);
 
     switch (global_waveform_type) {
         case 0: // Sine
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 1: // Square
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SQUARE ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 2: // Sawtooth
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SAWTOOTH ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 3: // Triangle
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: TRIANGLE ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 4: // Pulse
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: PULSE ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 5: // Noise
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: NOISE ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
         case 6: // Sine Squared
             snprintf(buffer, sizeof(buffer), "WAVEFORM_TYPE: SINE SQUARED ");
-            tb_print(startx + 2, starty + 5, TB_WHITE, TB_DEFAULT, buffer);
+            tb_print(startx + 2, starty + 4, TB_WHITE, TB_DEFAULT, buffer);
             break;
             
     }
@@ -584,7 +584,7 @@ void draw_interface(MultiSynthData *multi_data, RecentActions *recent_actions, i
     int constants_y = 2;
 
     int synth_params_x = 2;
-    int synth_params_y = 18; 
+    int synth_params_y = 15; 
 
     // Draw components
     draw_recent_actions(recent_actions_x, recent_actions_y, recent_actions);
@@ -697,10 +697,6 @@ int main(int argc, char *argv[]) {
     MultiSynthData multi_data = {0};
     multi_data.current_time = 0.0;
     pthread_mutex_init(&multi_data.mutex, NULL);
-
-    // add_synth(&multi_data, 150.0);
-    // multi_data.sounds[0].params.amplitude = 0.0;
-    // multi_data.sounds[0].params.waveform_type = waveform_type;
 
     // -------------------------have to add sound for callback to start correctly-----------------------------------------------
     SynthData *new_sound = &multi_data.sounds[multi_data.num_sounds];
