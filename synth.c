@@ -20,7 +20,7 @@ FILE *log_file;
 #define FRAMES_PER_BUFFER 256
 #define BUFFER_SIZE 8192 // Adjust this value as needed
 #define PI 3.14159265358979323846
-#define MAX_SOUNDS 12
+#define MAX_SOUNDS 13
 #define NUM_BUFFERS 3
 #define RECENT_ACTIONS_MAX 10
 
@@ -77,6 +77,7 @@ typedef struct {
     double start_time;
     double release_start_time;
     int is_active;
+    atomic_int is_on;
 } SynthData;
 
 typedef struct {
@@ -92,6 +93,7 @@ typedef struct {
     int action_count;
 } RecentActions;
 
+
 // Function prototypes
 void initialize_buffer_manager(BufferManager *bm);
 void fill_buffer(SynthData *sound, int buffer_index, double current_time);
@@ -103,7 +105,6 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
 void add_synth(MultiSynthData *multi_data, double frequency);
 double generate_sample(SynthData *data, double current_time);
 double apply_envelope(SynthData *data, double current_time);
-
 
 
 //intialize
@@ -262,6 +263,7 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
             SynthData *sound = &data->sounds[j];
             BufferManager *bm = &sound->buffer_manager;
 
+
             if (bm->buffer_index >= BUFFER_SIZE) {
                 pthread_mutex_lock(&bm->mutexes[bm->current_buffer]);
                 atomic_store(&bm->buffer_ready[bm->current_buffer], 0);
@@ -271,6 +273,10 @@ static int paCallbackSynth(const void *inputBuffer, void *outputBuffer,
                 bm->current_buffer = (bm->current_buffer + 1) % NUM_BUFFERS;
                 bm->buffer_index = 0;
             }
+
+           // if (sound->is_on == 0) {
+           //     continue;
+           // }
 
             sample += bm->buffers[bm->current_buffer][bm->buffer_index++];
         }
@@ -624,6 +630,13 @@ void *termbox_thread(void *arg) {
         return NULL;
     }
 
+   // for (int i = 0; i < 12; i++) {
+   //     add_synth(multi_data, key_to_freq[i]);
+   //     multi_data->sounds[i+1].is_on = 0;  
+   //     //snprintf(action_text, sizeof(action_text), "Key %c pressed: %fHz", key_chars[i], key_to_freq[i]);
+   //     add_recent_action(&recent_actions, "Key pressed:");
+   // }
+
     tb_set_input_mode(TB_INPUT_ESC | TB_INPUT_MOUSE);
     tb_set_output_mode(TB_OUTPUT_NORMAL);
 
@@ -644,11 +657,13 @@ void *termbox_thread(void *arg) {
                     if (!active_keys[i]) {
                         add_synth(multi_data, key_to_freq[i]); // waveform_type set to 0
                         active_keys[i] = 1;
+                        atomic_store(&multi_data->sounds[i+1].is_on, 1);
                         snprintf(action_text, sizeof(action_text), "Key %c pressed: %fHz", ev.ch, key_to_freq[i]);
                         add_recent_action(&recent_actions, action_text);
                     } else {
                         remove_synth(multi_data, key_to_freq[i]);
                         active_keys[i] = 0;
+                        atomic_store(&multi_data->sounds[i+1].is_on, 0);
                         snprintf(action_text, sizeof(action_text), "Key %c released", ev.ch);
                         add_recent_action(&recent_actions, action_text);
                     }
@@ -662,6 +677,7 @@ void *termbox_thread(void *arg) {
     tb_shutdown();
     return NULL;
 }
+
 
 
 int main(int argc, char *argv[]) {
@@ -753,6 +769,7 @@ int main(int argc, char *argv[]) {
             paFloat32, // 32 bit floating point output
             SAMPLE_RATE, FRAMES_PER_BUFFER, paCallbackSynth,
             &multi_data);
+
 
     if (err != paNoError)
         goto error;
